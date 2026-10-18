@@ -2,22 +2,6 @@
 """
 전국 통합(대전·성남/경기·서울) 다중 정류장·다중 버스 노선
 도착 N분 전 제미나이(Gemini) 브리핑 & 텔레그램 자동 알림 스크립트 (GitHub Actions 전용)
-
-지원 권역 및 공식 OpenAPI:
-1. 대전 및 전국 지자체 (region="daejeon" 또는 "tago")
-   - 국토교통부(TAGO) 버스도착정보: https://www.data.go.kr/data/15098530/openapi.do
-   - 국토교통부(TAGO) 버스정류소정보: https://www.data.go.kr/data/15098534/openapi.do
-   - 국토교통부(TAGO) 버스노선정보: https://www.data.go.kr/data/15098529/openapi.do
-2. 성남시·경기도 전역 (region="seongnam" 또는 "gyeonggi")
-   - 경기도_버스도착정보 조회(v2): https://www.data.go.kr/data/15080346/openapi.do
-   - 경기도_정류소 조회(v2): https://www.data.go.kr/data/15080666/openapi.do
-   - 경기버스정보(GBIS) 매뉴얼: https://www.gbis.go.kr/gbis2014/publicService.action?cmd=mBusArrivalStation
-3. 서울특별시 전역 (region="seoul")
-   - 서울특별시_버스도착정보조회: https://www.data.go.kr/data/15000314/openapi.do
-   - 서울시 정류소정보조회(getStationByUid): http://api.bus.go.kr/contents/sub02/getStationByUid.html
-4. AI 브리핑 & 텔레그램 알림
-   - Google GenAI SDK (google-genai): https://ai.google.dev/gemini-api/docs/libraries
-   - Telegram Bot API (sendMessage): https://core.telegram.org/bots/api
 """
 
 from __future__ import annotations
@@ -28,6 +12,7 @@ import os
 import re
 import sys
 import time
+import urllib.parse
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Any
@@ -38,15 +23,13 @@ from google import genai
 
 KST = ZoneInfo("Asia/Seoul")
 
-# =====================================================================
-# 1. 환경변수 및 기본 타겟 설정 (단일 설정 & 다중 JSON 설정 모두 지원)
-# =====================================================================
-DATA_GO_KR_API_KEY = os.getenv("DATA_GO_KR_API_KEY", "").strip()
+# Encoding/Decoding 인증키 모두 호환되도록 unquote 처리
+RAW_DATA_API_KEY = os.getenv("DATA_GO_KR_API_KEY", "").strip()
+DATA_GO_KR_API_KEY = urllib.parse.unquote(RAW_DATA_API_KEY) if RAW_DATA_API_KEY else ""
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
-# 기본 알림 조건 및 모니터링 시간대 (기본값: 도착 5분 전 이내, 07:20 ~ 07:40 KST)
 ALERT_THRESHOLD_MIN = int(os.getenv("ALERT_THRESHOLD_MIN", "5"))
 POLL_INTERVAL_SEC = int(os.getenv("POLL_INTERVAL_SEC", "60"))
 WINDOW_START_HOUR = int(os.getenv("WINDOW_START_HOUR", "7"))
@@ -55,7 +38,6 @@ WINDOW_END_HOUR = int(os.getenv("WINDOW_END_HOUR", "7"))
 WINDOW_END_MIN = int(os.getenv("WINDOW_END_MIN", "40"))
 RUN_ONCE_NOW = os.getenv("RUN_ONCE_NOW", "false").lower() == "true"
 
-# TAGO 주요 도시코드 매핑
 TAGO_CITY_CODES: dict[str, str] = {
     "daejeon": "25",
     "대전": "25",
@@ -72,9 +54,11 @@ TAGO_CITY_CODES: dict[str, str] = {
     "seongnam_tago": "31020",
 }
 
-# OpenAPI 엔드포인트 정의
 TAGO_STOP_SEARCH_URL = (
     "http://apis.data.go.kr/1613000/BusSttnInfoInqireService/getSttnNoList"
+)
+TAGO_ROUTE_STOPS_URL = (
+    "http://apis.data.go.kr/1613000/BusRouteInfoInqireService/getRouteAcctoThrghSttnList"
 )
 TAGO_ARRIVAL_ALL_URL = (
     "http://apis.data.go.kr/1613000/ArvlInfoInqireService/"
@@ -93,38 +77,30 @@ SEOUL_STATION_UID_URL = (
 
 @dataclass
 class WatchTarget:
-    """감시할 정류장 및 버스 노선 설정 단위"""
-
-    region: str  # 'daejeon' | 'seongnam' | 'gyeonggi' | 'seoul' | 'tago'
-    stop_no: str  # 정류소 번호(5자리 ARS-ID / mobileNo, 예: '11690', '06019', '22009')
-    routes: list[str]  # 감시할 노선번호 목록 (예: ['311', '103'] 또는 ['340', '9000'])
-    stop_name: str = ""  # 정류장 별칭 (미입력 시 API 응답 정류소명 자동 사용)
-    station_id: str = ""  # 표준 정류소 ID (미입력 시 stop_no로 자동 조회 및 캐싱)
-    city_code: str = ""  # TAGO 전용 도시코드 (대전 기본값 '25', 성남 폴백 '31020')
+    region: str
+    stop_no: str
+    routes: list[str]
+    stop_name: str = ""
+    station_id: str = ""
+    city_code: str = ""
     threshold_min: int = ALERT_THRESHOLD_MIN
 
 
 @dataclass
 class UnifiedArrival:
-    """권역별(대전·성남/경기·서울) 버스 도착 정보를 통일한 표준 데이터 모델"""
-
     region_label: str
     stop_name: str
     stop_no: str
     route_no: str
-    arr_sec: int  # 도착 예상 남은 시간 (초)
-    prev_station_cnt: str  # 남은 정류장 수 (예: '3')
-    vehicle_type: str = "일반버스"  # 일반버스 / 저상버스 / 2층버스 등
-    vehicle_id_or_plate: str = ""  # 차량번호 또는 고유ID (중복 알림 방지용)
-    extra_info: str = ""  # 빈자리 수(성남/경기 광역버스), 원문 메시지(서울), 방향 정보 등
+    arr_sec: int
+    prev_station_cnt: str
+    vehicle_type: str = "일반버스"
+    vehicle_id_or_plate: str = ""
+    extra_info: str = ""
     raw_fields: dict[str, Any] = field(default_factory=dict)
 
 
 def load_watch_targets() -> list[WatchTarget]:
-    """
-    TARGETS_JSON 환경변수가 있으면 다중 정류장·다중 버스 목록을 로드하고,
-    없으면 단일 환경변수(기본값: 대전 명석고등학교 11690 / 311번)를 로드합니다.
-    """
     targets_json = os.getenv("TARGETS_JSON", "").strip()
     if targets_json:
         raw_list = json.loads(targets_json)
@@ -148,7 +124,6 @@ def load_watch_targets() -> list[WatchTarget]:
             )
         return targets
 
-    # 단일 환경변수 모드 (기존 호환 + 다중 노선 콤마 구분 지원)
     region = os.getenv("BUS_REGION", "daejeon").strip().lower()
     stop_no = os.getenv("BUS_STOP_ARS_ID", "11690").replace("-", "").strip()
     stop_name = os.getenv(
@@ -175,47 +150,91 @@ def load_watch_targets() -> list[WatchTarget]:
     ]
 
 
-# =====================================================================
-# 2. 권역 1: 대전 및 전국 TAGO API 조회 모듈 (region="daejeon" | "tago")
-# =====================================================================
-def extract_tago_items(response_json: dict[str, Any]) -> list[dict[str, Any]]:
-    body = response_json.get("response", {}).get("body", {})
-    items = body.get("items")
-    if not items:
+def parse_tago_response(resp_text: str) -> list[dict[str, Any]]:
+    """TAGO API 응답(JSON 또는 XML 에러/데이터)을 안전하게 파싱합니다."""
+    text = resp_text.strip()
+    if not text:
         return []
-    item_data = items.get("item", [])
-    if isinstance(item_data, dict):
-        return [item_data]
-    if isinstance(item_data, list):
-        return item_data
-    return []
+    if text.startswith("{"):
+        data = json.loads(text)
+        body = data.get("response", {}).get("body", {})
+        items = body.get("items")
+        if not items:
+            return []
+        item_data = items.get("item", [])
+        if isinstance(item_data, dict):
+            return [item_data]
+        if isinstance(item_data, list):
+            return item_data
+        return []
+
+    root = ET.fromstring(text)
+    err_msg = root.findtext(".//returnAuthMsg") or root.findtext(".//errMsg")
+    result_msg = root.findtext(".//resultMsg")
+    if err_msg and err_msg != "NORMAL_CODE":
+        raise RuntimeError(f"공공데이터포털 API 인증/호출 오류: {err_msg} ({result_msg})")
+    items_list: list[dict[str, Any]] = []
+    for item_el in root.findall(".//item"):
+        items_list.append({child.tag: (child.text or "") for child in item_el})
+    return items_list
 
 
 def resolve_tago_node_id(service_key: str, city_code: str, target: WatchTarget) -> str:
     if target.station_id:
         return target.station_id
 
-    params = {
-        "serviceKey": service_key,
-        "cityCode": city_code,
-        "nodeNo": target.stop_no,
-        "numOfRows": 30,
-        "pageNo": 1,
-        "_type": "json",
-    }
-    resp = requests.get(TAGO_STOP_SEARCH_URL, params=params, timeout=10)
-    resp.raise_for_status()
-    for item in extract_tago_items(resp.json()):
-        if str(item.get("nodeno", "")).strip() == target.stop_no:
-            node_id = str(item.get("nodeid", "")).strip()
-            if not target.stop_name:
-                target.stop_name = str(item.get("nodenm", target.stop_no)).strip()
-            if node_id:
-                target.station_id = node_id
-                print(
-                    f"[INFO][TAGO] 정류소 번호 {target.stop_no} -> nodeId {node_id} 매칭 완료"
-                )
-                return node_id
+    try:
+        params = {
+            "serviceKey": service_key,
+            "cityCode": city_code,
+            "nodeNo": target.stop_no,
+            "numOfRows": 30,
+            "pageNo": 1,
+            "_type": "json",
+        }
+        resp = requests.get(TAGO_STOP_SEARCH_URL, params=params, timeout=10)
+        resp.raise_for_status()
+        for item in parse_tago_response(resp.text):
+            if str(item.get("nodeno", "")).strip() == target.stop_no:
+                node_id = str(item.get("nodeid", "")).strip()
+                if not target.stop_name:
+                    target.stop_name = str(item.get("nodenm", target.stop_no)).strip()
+                if node_id:
+                    target.station_id = node_id
+                    print(
+                        f"[INFO][TAGO] 정류소 번호 {target.stop_no} -> nodeId {node_id} 매칭 완료"
+                    )
+                    return node_id
+    except Exception as exc:
+        print(f"[WARN] TAGO 정류소 번호 조회 실패: {exc}")
+
+    # 대전 명석고등학교(11690)일 경우 311번 노선(DJB30300055) 경유 정류소 목록에서 2차 조회
+    if city_code == "25" and target.stop_no == "11690":
+        params = {
+            "serviceKey": service_key,
+            "cityCode": "25",
+            "routeId": "DJB30300055",
+            "numOfRows": 150,
+            "pageNo": 1,
+            "_type": "json",
+        }
+        resp = requests.get(TAGO_ROUTE_STOPS_URL, params=params, timeout=10)
+        resp.raise_for_status()
+        items = parse_tago_response(resp.text)
+        for item in items:
+            if str(item.get("nodeno", "")).strip() == "11690":
+                node_id = str(item.get("nodeid", "")).strip()
+                if node_id:
+                    target.station_id = node_id
+                    return node_id
+        for item in items:
+            node_nm = str(item.get("nodenm", "")).strip()
+            node_ord = int(item.get("nodeord", 999))
+            if "명석고등학교" in node_nm and node_ord < 50:
+                node_id = str(item.get("nodeid", "")).strip()
+                if node_id:
+                    target.station_id = node_id
+                    return node_id
 
     raise RuntimeError(
         f"[TAGO] 도시코드 {city_code}에서 정류소 번호 {target.stop_no}의 nodeId를 찾지 못했습니다."
@@ -242,7 +261,7 @@ def fetch_tago_arrivals(
     }
     resp = requests.get(TAGO_ARRIVAL_ALL_URL, params=params, timeout=10)
     resp.raise_for_status()
-    items = extract_tago_items(resp.json())
+    items = parse_tago_response(resp.text)
 
     want_routes = {r.upper() for r in target.routes}
     results: list[UnifiedArrival] = []
@@ -270,9 +289,6 @@ def fetch_tago_arrivals(
     return results
 
 
-# =====================================================================
-# 3. 권역 2: 성남시·경기도 GBIS API 조회 모듈 (region="seongnam" | "gyeonggi")
-# =====================================================================
 def extract_gbis_list(response_json: dict[str, Any], list_key: str) -> list[dict[str, Any]]:
     msg_body = response_json.get("response", {}).get("msgBody", {})
     if not msg_body:
@@ -286,10 +302,6 @@ def extract_gbis_list(response_json: dict[str, Any], list_key: str) -> list[dict
 
 
 def resolve_gbis_station_id(service_key: str, target: WatchTarget) -> str:
-    """
-    성남·경기도 5자리 정류소 번호(mobileNo, 예: 06019 등)로
-    경기도 표준 9자리 stationId(예: 206000xxx)를 자동 조회합니다.
-    """
     if target.station_id:
         return target.station_id
 
@@ -323,7 +335,6 @@ def resolve_gbis_station_id(service_key: str, target: WatchTarget) -> str:
 
 
 def fetch_gbis_arrivals(service_key: str, target: WatchTarget) -> list[UnifiedArrival]:
-    """성남시·경기도 정류소의 실시간 버스 도착정보를 조회합니다 (실패 시 TAGO 성남 코드 31020 폴백)."""
     try:
         station_id = resolve_gbis_station_id(service_key, target)
         params = {
@@ -397,14 +408,7 @@ def fetch_gbis_arrivals(service_key: str, target: WatchTarget) -> list[UnifiedAr
         raise
 
 
-# =====================================================================
-# 4. 권역 3: 서울특별시 TOPIS API 조회 모듈 (region="seoul")
-# =====================================================================
 def parse_seoul_arrmsg_seconds(tra_time_raw: Any, arrmsg: str) -> tuple[int | None, str]:
-    """
-    서울시 버스 도착메시지(arrmsg1, 예: '4분12초후[3번째 전]', '곧도착', '운행종료', '출발대기')와
-    traTime1(초)에서 도착 남은 시간(초)과 남은 정류장 수를 추출합니다.
-    """
     msg = (arrmsg or "").strip()
     if any(closed in msg for closed in ("운행종료", "출발대기", "차고지")):
         return None, "-"
@@ -432,10 +436,6 @@ def parse_seoul_arrmsg_seconds(tra_time_raw: Any, arrmsg: str) -> tuple[int | No
 
 
 def fetch_seoul_arrivals(service_key: str, target: WatchTarget) -> list[UnifiedArrival]:
-    """
-    서울시 정류소 고유번호(arsId, 5자리 예: '22009')로 getStationByUid를 호출해
-    지정 노선의 실시간 도착정보를 조회합니다 (JSON 및 XML 응답 모두 호환).
-    """
     params = {
         "serviceKey": service_key,
         "arsId": target.stop_no,
@@ -454,7 +454,6 @@ def fetch_seoul_arrivals(service_key: str, target: WatchTarget) -> list[UnifiedA
         elif isinstance(item_list, list):
             raw_items = item_list
     else:
-        # XML 응답 파싱
         root = ET.fromstring(text_body)
         for item_el in root.findall(".//itemList"):
             raw_items.append({child.tag: (child.text or "") for child in item_el})
@@ -512,9 +511,6 @@ def fetch_seoul_arrivals(service_key: str, target: WatchTarget) -> list[UnifiedA
     return results
 
 
-# =====================================================================
-# 5. 통합 디스패처, 제미나이(Gemini) 브리핑 생성 및 텔레그램 발송
-# =====================================================================
 def fetch_arrivals_for_target(
     service_key: str, target: WatchTarget
 ) -> list[UnifiedArrival]:
@@ -599,7 +595,10 @@ def main() -> None:
         if not val
     ]
     if missing:
-        print(f"[ERROR] 필수 환경변수가 누락되었습니다: {', '.join(missing)}")
+        print(
+            f"[ERROR] GitHub Secrets에 필수 환경변수가 등록되지 않았거나 비어 있습니다: {', '.join(missing)}\n"
+            "저장소 상단 Settings -> Secrets and variables -> Actions 메뉴에서 4개 시크릿 이름을 확인해 주세요."
+        )
         sys.exit(1)
 
     targets = load_watch_targets()
@@ -618,9 +617,9 @@ def main() -> None:
         hour=WINDOW_END_HOUR, minute=WINDOW_END_MIN, second=0, microsecond=0
     )
 
-    # 수동 1회 점검 모드(RUN_ONCE_NOW=true): 모든 타겟 정류장·노선을 즉시 조회해 브리핑 발송
     if RUN_ONCE_NOW:
-        print(f"[INFO] 수동 즉시 점검 모드 실행 ({now_kst.strftime('%Y-%m-%d %H:%M:%S')})")
+        print(f"[INFO] 수동/즉시 점검 모드 실행 ({now_kst.strftime('%Y-%m-%d %H:%M:%S')})")
+        any_error = False
         for target in targets:
             try:
                 arrivals = fetch_arrivals_for_target(DATA_GO_KR_API_KEY, target)
@@ -628,10 +627,9 @@ def main() -> None:
                     send_telegram_message(
                         f"ℹ️ [{now_kst.strftime('%H:%M')}] [{target.region.upper()}] "
                         f"{target.stop_name or target.stop_no} 정류장에 현재 도착 예정인 "
-                        f"{', '.join(target.routes)}번 버스가 없습니다."
+                        f"{', '.join(target.routes)}번 버스가 없습니다. (연동 정상 확인 완료)"
                     )
                     continue
-                # 노선별로 가장 빨리 도착하는 버스 1대씩 브리핑
                 seen_routes: set[str] = set()
                 for arr in arrivals:
                     if arr.route_no in seen_routes:
@@ -642,16 +640,17 @@ def main() -> None:
                     )
                     send_telegram_message(briefing)
             except Exception as exc:
+                any_error = True
                 print(f"[ERROR] 타겟({target.stop_no}) 조회 중 오류: {exc}")
+        if any_error:
+            sys.exit(1)
         return
 
-    # 07:20 이전에 워크플로우가 조기 시작된 경우 시작 시각까지 대기
     if now_kst < start_time:
         wait_sec = (start_time - now_kst).total_seconds()
         print(f"[INFO] 시작 시각({start_time.strftime('%H:%M')})까지 {int(wait_sec)}초 대기합니다...")
         time.sleep(max(0, wait_sec))
 
-    # (권역, 정류소번호, 노선번호)별 중복 알림 방지 상태 기록
     last_notified_sec_map: dict[tuple[str, str, str], int] = {}
     last_notified_plate_map: dict[tuple[str, str, str], str] = {}
 
@@ -665,7 +664,6 @@ def main() -> None:
             threshold_sec = target.threshold_min * 60
             try:
                 arrivals = fetch_arrivals_for_target(DATA_GO_KR_API_KEY, target)
-                # 각 노선별 최근접 차량 1대씩만 평가
                 nearest_by_route: dict[str, UnifiedArrival] = {}
                 for arr in arrivals:
                     if arr.route_no not in nearest_by_route:
@@ -684,8 +682,6 @@ def main() -> None:
                         prev_sec = last_notified_sec_map.get(key)
                         prev_plate = last_notified_plate_map.get(key, "")
 
-                        # 차량번호(성남/경기·서울)가 있으면 차량번호 변경 여부로 새 버스 판별,
-                        # 차량번호가 없으면(대전/TAGO) 남은 시간이 120초 이상 늘어났는지로 새 버스 판별
                         if nearest.vehicle_id_or_plate and prev_plate:
                             is_new_bus = nearest.vehicle_id_or_plate != prev_plate
                         else:
