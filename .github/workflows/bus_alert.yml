@@ -8,7 +8,8 @@ on:
   schedule:
     # UTC 22:15 (일~목) = KST 07:15 (월~금 평일 아침)
     # 07:15에 미리 켜진 후 07:20:00 ~ 07:40:00 KST 동안 1분 간격으로 감시합니다.
-    - cron: '15 22 * * 0-4'
+    # - cron: '15 22 * * 0-4'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       run_once_now:
