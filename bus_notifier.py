@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 전국 통합(대전·성남/경기·서울) 다중 정류장·다중 버스 노선
-도착 N분 전 제미나이(Gemini) 브리핑 & 텔레그램 자동 알림 스크립트 (GitHub Actions 전용)
+도착 N분 전 제미나이(Gemini) 브리핑 & 텔레그램 자동 알림 스크립트 (GitHub Actions 배치 전용)
 """
 
 from __future__ import annotations
@@ -36,6 +36,8 @@ WINDOW_START_HOUR = int(os.getenv("WINDOW_START_HOUR", "7"))
 WINDOW_START_MIN = int(os.getenv("WINDOW_START_MIN", "20"))
 WINDOW_END_HOUR = int(os.getenv("WINDOW_END_HOUR", "7"))
 WINDOW_END_MIN = int(os.getenv("WINDOW_END_MIN", "40"))
+BATCH_DURATION_MIN = int(os.getenv("BATCH_DURATION_MIN", "20"))
+SEND_START_SUMMARY = os.getenv("SEND_START_SUMMARY", "true").lower() == "true"
 RUN_ONCE_NOW = os.getenv("RUN_ONCE_NOW", "false").lower() == "true"
 
 TAGO_CITY_CODES: dict[str, str] = {
@@ -151,7 +153,6 @@ def load_watch_targets() -> list[WatchTarget]:
 
 
 def parse_tago_response(resp_text: str) -> list[dict[str, Any]]:
-    """TAGO API 응답(JSON 또는 XML 에러/데이터)을 안전하게 파싱합니다."""
     text = resp_text.strip()
     if not text:
         return []
@@ -183,6 +184,7 @@ def resolve_tago_node_id(service_key: str, city_code: str, target: WatchTarget) 
     if target.station_id:
         return target.station_id
 
+    # 1차: 버스정류소정보 API(getSttnNoList) 조회
     try:
         params = {
             "serviceKey": service_key,
@@ -206,38 +208,44 @@ def resolve_tago_node_id(service_key: str, city_code: str, target: WatchTarget) 
                     )
                     return node_id
     except Exception as exc:
-        print(f"[WARN] TAGO 정류소 번호 조회 실패: {exc}")
+        print(f"[WARN] TAGO 정류소 번호 조회(BusSttnInfoInqireService) 실패: {exc}")
 
-    # 대전 명석고등학교(11690)일 경우 311번 노선(DJB30300055) 경유 정류소 목록에서 2차 조회
-    if city_code == "25" and target.stop_no == "11690":
-        params = {
-            "serviceKey": service_key,
-            "cityCode": "25",
-            "routeId": "DJB30300055",
-            "numOfRows": 150,
-            "pageNo": 1,
-            "_type": "json",
-        }
-        resp = requests.get(TAGO_ROUTE_STOPS_URL, params=params, timeout=10)
-        resp.raise_for_status()
-        items = parse_tago_response(resp.text)
-        for item in items:
-            if str(item.get("nodeno", "")).strip() == "11690":
-                node_id = str(item.get("nodeid", "")).strip()
-                if node_id:
-                    target.station_id = node_id
-                    return node_id
-        for item in items:
-            node_nm = str(item.get("nodenm", "")).strip()
-            node_ord = int(item.get("nodeord", 999))
-            if "명석고등학교" in node_nm and node_ord < 50:
-                node_id = str(item.get("nodeid", "")).strip()
-                if node_id:
-                    target.station_id = node_id
-                    return node_id
+    # 2차: 대전 명석고등학교(11690 / 51630)일 경우 버스도착정보 API만 신청된 상태에서도 동작하도록 후보 nodeId 탐색
+    if city_code == "25" and target.stop_no in ("11690", "51630"):
+        if target.stop_no == "51630":
+            target.station_id = "DJB8001611"
+            return "DJB8001611"
+        for candidate_id in ("DJB8001610", "DJB8001612", "DJB8001611"):
+            try:
+                probe_params = {
+                    "serviceKey": service_key,
+                    "cityCode": "25",
+                    "nodeId": candidate_id,
+                    "numOfRows": 30,
+                    "pageNo": 1,
+                    "_type": "json",
+                }
+                probe_resp = requests.get(
+                    TAGO_ARRIVAL_ALL_URL, params=probe_params, timeout=10
+                )
+                probe_resp.raise_for_status()
+                probe_items = parse_tago_response(probe_resp.text)
+                if any("명석고" in str(it.get("nodenm", "")) for it in probe_items):
+                    target.station_id = candidate_id
+                    print(
+                        f"[INFO][TAGO] 도착정보 API 직접 탐색으로 명석고({target.stop_no}) -> {candidate_id} 매칭 완료"
+                    )
+                    return candidate_id
+            except Exception:
+                continue
+        # 심야/운행종료 시간대라 도착 예정 버스가 0대여서 probe_items가 비어있는 경우 기본값 지정
+        target.station_id = "DJB8001610"
+        print("[INFO][TAGO] 명석고(11690) 기본 표준 ID(DJB8001610) 사용")
+        return "DJB8001610"
 
     raise RuntimeError(
-        f"[TAGO] 도시코드 {city_code}에서 정류소 번호 {target.stop_no}의 nodeId를 찾지 못했습니다."
+        f"[TAGO] 도시코드 {city_code}에서 정류소 번호 {target.stop_no}의 nodeId를 찾지 못했습니다. "
+        "공공데이터포털에서 '국토교통부_(TAGO)_버스정류소정보' 활용신청 여부를 확인해 주세요."
     )
 
 
@@ -618,7 +626,7 @@ def main() -> None:
     )
 
     if RUN_ONCE_NOW:
-        print(f"[INFO] 수동/즉시 점검 모드 실행 ({now_kst.strftime('%Y-%m-%d %H:%M:%S')})")
+        print(f"[INFO] 수동/즉시 1회 점검 모드 실행 ({now_kst.strftime('%Y-%m-%d %H:%M:%S')})")
         any_error = False
         for target in targets:
             try:
@@ -646,18 +654,39 @@ def main() -> None:
             sys.exit(1)
         return
 
+    # 1) 아침 07:20 이전에 크론이 일찍 켜졌으면 07:20:00까지 대기
+    # 2) 만약 GitHub 크론 지연으로 07:30 이후에 켜졌거나 낮 시간에 배치 테스트로 실행했다면
+    #    즉시 종료하지 않고 현재 시각부터 BATCH_DURATION_MIN(기본 20분) 동안 배치 감시를 수행합니다.
     if now_kst < start_time:
         wait_sec = (start_time - now_kst).total_seconds()
-        print(f"[INFO] 시작 시각({start_time.strftime('%H:%M')})까지 {int(wait_sec)}초 대기합니다...")
-        time.sleep(max(0, wait_sec))
+        # 단, 아침 06:30~07:20 사이 조기 기상일 때만 대기하고, 그 외 시간대 수동 배치 실행은 즉시 시작
+        if wait_sec <= 3600:
+            print(
+                f"[INFO] 아침 배치 시작 시각({start_time.strftime('%H:%M')})까지 {int(wait_sec)}초 대기합니다..."
+            )
+            time.sleep(max(0, wait_sec))
+            now_kst = datetime.datetime.now(KST)
+        else:
+            end_time = now_kst + datetime.timedelta(minutes=BATCH_DURATION_MIN)
+    elif now_kst >= end_time - datetime.timedelta(minutes=5):
+        end_time = now_kst + datetime.timedelta(minutes=BATCH_DURATION_MIN)
+        print(
+            f"[INFO] 지정 시간대 이후 실행 감지 -> 지금부터 {BATCH_DURATION_MIN}분간({end_time.strftime('%H:%M')}까지) 배치 감시를 진행합니다."
+        )
+
+    print(
+        f"[INFO] 배치 폴링 시작: {now_kst.strftime('%H:%M:%S')} ~ {end_time.strftime('%H:%M:%S')} KST "
+        f"(조회 주기: {POLL_INTERVAL_SEC}초)"
+    )
 
     last_notified_sec_map: dict[tuple[str, str, str], int] = {}
     last_notified_plate_map: dict[tuple[str, str, str], str] = {}
+    is_first_poll = True
 
     while True:
         now_kst = datetime.datetime.now(KST)
         if now_kst > end_time:
-            print(f"[INFO] 모니터링 종료 시각({end_time.strftime('%H:%M')}) 도달. 작업을 마칩니다.")
+            print(f"[INFO] 모니터링 종료 시각({end_time.strftime('%H:%M')}) 도달. 배치 작업을 마칩니다.")
             break
 
         for target in targets:
@@ -668,6 +697,14 @@ def main() -> None:
                 for arr in arrivals:
                     if arr.route_no not in nearest_by_route:
                         nearest_by_route[arr.route_no] = arr
+
+                # 배치 시작 첫 폴링 시 현재 운행 현황 요약 1회 전송 (배치가 정상 가동 중임을 텔레그램으로 확인)
+                if is_first_poll and SEND_START_SUMMARY and not nearest_by_route:
+                    send_telegram_message(
+                        f"🕖 [{now_kst.strftime('%H:%M')} 배치 감시 시작] "
+                        f"{target.stop_name} ({', '.join(target.routes)}번) ~{end_time.strftime('%H:%M')}까지 "
+                        f"도착 {target.threshold_min}분 전 진입 여부를 1분 간격으로 감시합니다."
+                    )
 
                 for route_no, nearest in nearest_by_route.items():
                     key = (target.region, target.stop_no, route_no)
@@ -698,13 +735,23 @@ def main() -> None:
                         last_notified_sec_map[key] = nearest.arr_sec
                         if nearest.vehicle_id_or_plate:
                             last_notified_plate_map[key] = nearest.vehicle_id_or_plate
+                    elif is_first_poll and SEND_START_SUMMARY:
+                        # 첫 폴링 시점에 버스가 아직 N분보다 멀리 있더라도 배치 시작 신고 겸 현재 위치 1회 안내
+                        send_telegram_message(
+                            f"🕖 [{now_kst.strftime('%H:%M')} 배치 감시 시작] "
+                            f"현재 가장 가까운 {route_no}번 버스는 약 {nearest.arr_sec // 60}분 후"
+                            f"({nearest.prev_station_cnt}정류장 전) 도착 예정입니다. "
+                            f"{target.threshold_min}분 이내 진입 시 제미나이 브리핑을 보내드릴게요!"
+                        )
             except Exception as exc:
                 print(
                     f"[WARN] 타겟({target.region}/{target.stop_no}) 폴링 중 일시적 오류: {exc}"
                 )
 
+        is_first_poll = False
         now_after = datetime.datetime.now(KST)
         if now_after + datetime.timedelta(seconds=POLL_INTERVAL_SEC) > end_time:
+            print(f"[INFO] 배치 감시 종료 시각({end_time.strftime('%H:%M')}) 도달. 정상 종료합니다.")
             break
         time.sleep(POLL_INTERVAL_SEC)
 
