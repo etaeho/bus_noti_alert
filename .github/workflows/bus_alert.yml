@@ -6,20 +6,21 @@ on:
       - main
       - master
   schedule:
-    # UTC 22:15 (일~목) = KST 07:15 (월~금 평일 아침)
-    # 07:15에 미리 켜진 후 07:20:00 ~ 07:40:00 KST 동안 1분 간격으로 감시합니다.
-    # - cron: '15 22 * * 0-4'
-    - cron: '*/5 * * * *'
+    # GitHub Actions 크론 지연 및 누락 방지를 위해 이중 스케줄(매일 KST 07:05, 07:18) 등록
+    # UTC 22:05 = 한국 시간(KST) 오전 07:05 (미리 켜져서 07:20까지 대기 후 07:40까지 1분 간격 감시)
+    - cron: '5 22 * * *'
+    # UTC 22:18 = 한국 시간(KST) 오전 07:18 (첫 크론이 지연·누락되었을 때 백업 실행)
+    - cron: '18 22 * * *'
   workflow_dispatch:
     inputs:
       run_once_now:
-        description: '현재 시각 기준으로 즉시 1회 테스트 알림 받기'
+        description: '실행 모드 선택 (false: 20분간 1분 간격 배치 감시 / true: 즉시 1회만 테스트)'
         required: false
-        default: 'true'
+        default: 'false'
         type: choice
         options:
-          - 'true'
           - 'false'
+          - 'true'
       region:
         description: '조회 권역 선택 (daejeon / seongnam / gyeonggi / seoul)'
         required: false
@@ -41,10 +42,15 @@ on:
         default: '311'
         type: string
 
+# 동일 배치잡이 중복으로 2개 동시에 도는 것을 방지 (이미 07:05 배치가 돌고 있으면 07:18 배치는 자동 건너뜀)
+concurrency:
+  group: bus-arrival-monitor
+  cancel-in-progress: false
+
 jobs:
   monitor-buses:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -71,7 +77,9 @@ jobs:
           BUS_ROUTES: ${{ github.event_name == 'workflow_dispatch' && inputs.routes || '311' }}
           ALERT_THRESHOLD_MIN: '5'
           POLL_INTERVAL_SEC: '60'
-          # 파일을 저장(push)하거나 수동 실행(workflow_dispatch)할 때는 즉시 1회 테스트로 동작하고,
-          # 아침 정기 스케줄(schedule)일 때만 07:20~07:40 대기 및 반복 감시 모드로 동작합니다.
-          RUN_ONCE_NOW: ${{ github.event_name == 'schedule' && 'false' || (github.event_name == 'workflow_dispatch' && inputs.run_once_now || 'true') }}
+          BATCH_DURATION_MIN: '20'
+          SEND_START_SUMMARY: 'true'
+          # 코드 수정 저장(push) 시에는 빠르게 1회 점검('true')하고,
+          # 정기 스케줄(schedule) 또는 수동 실행(workflow_dispatch 기본값 'false') 시에는 20분간 1분 간격 배치 잡이 돌아갑니다.
+          RUN_ONCE_NOW: ${{ github.event_name == 'push' && 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_once_now || 'false') }}
         run: python bus_notifier.py
