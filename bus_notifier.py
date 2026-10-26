@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 전국 통합(대전·성남/경기·서울) 다중 정류장·다중 버스 노선
-도착 N분 전 제미나이(Gemini) 브리핑 & 텔레그램 자동 알림 스크립트 (GitHub Actions 배치 전용)
+도착 N분 전 브리핑 & 텔레그램 자동 알림 스크립트 (GitHub Actions 배치 전용)
 """
 
 from __future__ import annotations
@@ -280,6 +280,10 @@ def fetch_tago_arrivals(
         if it.get("arrtime") is None:
             continue
         stop_nm = target.stop_name or str(it.get("nodenm", target.stop_no)).strip()
+        
+        # TAGO API에서 차량 번호가 제공되는 경우 대비
+        veh_no = str(it.get("vehicleno", "")).strip()
+        
         results.append(
             UnifiedArrival(
                 region_label="대전/TAGO" if city_code == "25" else f"TAGO({city_code})",
@@ -289,6 +293,7 @@ def fetch_tago_arrivals(
                 arr_sec=int(it["arrtime"]),
                 prev_station_cnt=str(it.get("arrprevstationcnt", "?")),
                 vehicle_type=str(it.get("vehicletp", "일반버스")),
+                vehicle_id_or_plate=veh_no,
                 extra_info=f"노선유형: {it.get('routetp', '시내버스')}",
                 raw_fields=it,
             )
@@ -535,50 +540,30 @@ def generate_gemini_briefing(
 ) -> str:
     arr_min = arrival.arr_sec // 60
     rem_sec = arrival.arr_sec % 60
-    now_str = now_kst.strftime("%H:%M:%S")
+    
+    # 부가 정보와 차량 번호 조합 로직
+    info_list = []
+    if arrival.extra_info:
+        info_list.append(arrival.extra_info)
+    
+    # extra_info 문자열 내에 '차량번호'가 이미 포함되어 있지 않은 경우에만 별도 추가
+    if arrival.vehicle_id_or_plate and "차량번호" not in arrival.extra_info:
+        info_list.append(f"차량번호: {arrival.vehicle_id_or_plate}")
 
-    fallback_msg = (
-        f"🚌 [{arrival.region_label} · {arrival.route_no}번 도착 {arr_min}분 전 알림]\n"
-        f"• 정류장: {arrival.stop_name}\n"
-        f"• 도착 예정: 약 {arr_min}분 {rem_sec}초 후 ({arrival.prev_station_cnt}정류장 전)\n"
-        f"• 차량/부가정보: {arrival.vehicle_type}"
-        + (f" ({arrival.extra_info})" if arrival.extra_info else "")
-        + "\n지금 정류장으로 이동하시면 바로 탑승하실 수 있습니다!"
+    extra_info_str = f"\n💡 부가정보 : {' | '.join(info_list)}" if info_list else ""
+    
+    # 가독성 강조형 (구분선 활용) 텔레그램 메시지 포맷
+    msg = (
+        f"🚌 [{arrival.route_no}번 버스 도착 안내]\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"⏳ 남은시간 : {arr_min}분 {rem_sec}초 후\n"
+        f"🚏 남은위치 : {arrival.prev_station_cnt}정류장 전\n"
+        f"📍 정류소명 : {arrival.stop_name}\n"
+        f"━━━━━━━━━━━━━━━━━━"
+        f"{extra_info_str}"
     )
-
-    if not GEMINI_API_KEY:
-        return fallback_msg
-
-    prompt = (
-        "당신은 대전·성남(경기)·서울권 출퇴근 및 통학 버스 탑승을 돕는 실시간 AI 교통 비서입니다.\n"
-        "아래 실시간 공공데이터 API 조회 결과를 바탕으로 텔레그램 알림 메시지를 작성해 주세요.\n\n"
-        f"- 기준 시각: {now_str} (KST)\n"
-        f"- 권역: {arrival.region_label}\n"
-        f"- 정류장: {arrival.stop_name} (정류소번호: {arrival.stop_no})\n"
-        f"- 노선 번호: {arrival.route_no}번 버스\n"
-        f"- 남은 도착 시간: 약 {arr_min}분 {rem_sec}초 ({arrival.arr_sec}초)\n"
-        f"- 남은 정류장 수: {arrival.prev_station_cnt}정류장 전\n"
-        f"- 차량 유형: {arrival.vehicle_type}\n"
-        f"- 부가 정보: {arrival.extra_info or '없음'}\n"
-        f"- 설정 알림 기준: 도착 {threshold_min}분 전 이내 진입\n\n"
-        "작성 규칙:\n"
-        f"1. 첫 줄에 이모지와 함께 핵심 요약('[{arrival.region_label} {arrival.route_no}번 도착 임박] 약 X분 후 도착 (Y정류장 전)')을 적어 주세요.\n"
-        "2. 정류장명, 남은 시간·정류장 수, 부가 정보(광역버스 잔여좌석, 저상버스 여부, 진행방향 등)를 포함해 3줄 이내로 간결하게 정리해 주세요.\n"
-        "3. 지금 바로 출발해야 하는지 여부를 다정하고 간결한 한 문장으로 덧붙여 주세요."
-    )
-
-    try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-        )
-        if response and response.text:
-            return response.text.strip()
-    except Exception as exc:
-        print(f"[WARN] Gemini API 호출 실패, 기본 브리핑 포맷 사용: {exc}")
-
-    return fallback_msg
+    
+    return msg
 
 
 def send_telegram_message(text: str) -> None:
@@ -605,7 +590,7 @@ def main() -> None:
     if missing:
         print(
             f"[ERROR] GitHub Secrets에 필수 환경변수가 등록되지 않았거나 비어 있습니다: {', '.join(missing)}\n"
-            "저장소 상단 Settings -> Secrets and variables -> Actions 메뉴에서 4개 시크릿 이름을 확인해 주세요."
+            "저장소 상단 Settings -> Secrets and variables -> Actions 메뉴에서 시크릿 이름을 확인해 주세요."
         )
         sys.exit(1)
 
@@ -654,12 +639,11 @@ def main() -> None:
             sys.exit(1)
         return
 
-    # 1) 아침 07:20 이전에 크론이 일찍 켜졌으면 07:20:00까지 대기
-    # 2) 만약 GitHub 크론 지연으로 07:30 이후에 켜졌거나 낮 시간에 배치 테스트로 실행했다면
-    #    즉시 종료하지 않고 현재 시각부터 BATCH_DURATION_MIN(기본 20분) 동안 배치 감시를 수행합니다.
+    # 1) 아침 배치 시작 시간 이전에 크론이 일찍 켜졌으면 대기
+    # 2) 만약 GitHub 크론 지연으로 늦게 켜졌다면 즉시 종료하지 않고 현재 시각부터 배치 지속 시간 동안 감시를 수행합니다.
     if now_kst < start_time:
         wait_sec = (start_time - now_kst).total_seconds()
-        # 단, 아침 06:30~07:20 사이 조기 기상일 때만 대기하고, 그 외 시간대 수동 배치 실행은 즉시 시작
+        # 단, 조기 기상일 때만 대기하고, 그 외 시간대 수동 배치 실행은 즉시 시작
         if wait_sec <= 3600:
             print(
                 f"[INFO] 아침 배치 시작 시각({start_time.strftime('%H:%M')})까지 {int(wait_sec)}초 대기합니다..."
@@ -698,7 +682,7 @@ def main() -> None:
                     if arr.route_no not in nearest_by_route:
                         nearest_by_route[arr.route_no] = arr
 
-                # 배치 시작 첫 폴링 시 현재 운행 현황 요약 1회 전송 (배치가 정상 가동 중임을 텔레그램으로 확인)
+                # 배치 시작 첫 폴링 시 현재 운행 현황 요약 1회 전송
                 if is_first_poll and SEND_START_SUMMARY and not nearest_by_route:
                     send_telegram_message(
                         f"🕖 [{now_kst.strftime('%H:%M')} 배치 감시 시작] "
@@ -736,12 +720,11 @@ def main() -> None:
                         if nearest.vehicle_id_or_plate:
                             last_notified_plate_map[key] = nearest.vehicle_id_or_plate
                     elif is_first_poll and SEND_START_SUMMARY:
-                        # 첫 폴링 시점에 버스가 아직 N분보다 멀리 있더라도 배치 시작 신고 겸 현재 위치 1회 안내
+                        # 첫 폴링 시점 1회 안내
                         send_telegram_message(
                             f"🕖 [{now_kst.strftime('%H:%M')} 배치 감시 시작] "
                             f"현재 가장 가까운 {route_no}번 버스는 약 {nearest.arr_sec // 60}분 후"
-                            f"({nearest.prev_station_cnt}정류장 전) 도착 예정입니다. "
-                            f"{target.threshold_min}분 이내 진입 시 제미나이 브리핑을 보내드릴게요!"
+                            f"({nearest.prev_station_cnt}정류장 전) 도착 예정입니다."
                         )
             except Exception as exc:
                 print(
