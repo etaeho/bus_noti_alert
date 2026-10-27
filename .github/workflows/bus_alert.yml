@@ -7,9 +7,9 @@ on:
       - master
   schedule:
     # 대기열 지연을 고려해 일찍 진입 (UTC 21:30 = KST 06:30)
-    - cron: '05 21 * * *'
+    - cron: '05 19 * * *'
     # 첫 크론 누락 시 백업 실행 (UTC 22:00 = KST 07:00)
-    - cron: '0 22 * * *'
+    - cron: '0 19 * * *'
   workflow_dispatch:
     inputs:
       run_once_now:
