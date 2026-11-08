@@ -1,5 +1,5 @@
 /**
- * 내 알림 탭: 처음 설정 안내 · 지금 감시 중인 정류장의 실시간 정보 · 내 알림 목록 · 최근 알림
+ * 알림 설정 탭: 처음 설정 안내 · 지금 감시 중인 정류장의 실시간 정보 · 버스 알림 목록
  */
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
@@ -47,7 +47,6 @@ export default function AlarmsScreen() {
   const [states, setStates] = useState<Record<string, AlarmRuntimeState>>({});
   const [ride, setRide] = useState<RideAlert | null>(null);
   const [rideState, setRideState] = useState<RideRuntimeState | null>(null);
-  const [recent, setRecent] = useState<HistoryEntry[]>([]);
   const [setup, setSetup] = useState<Setup | null>(null);
   const [now, setNow] = useState(new Date());
   const [refreshing, setRefreshing] = useState(false);
@@ -65,7 +64,6 @@ export default function AlarmsScreen() {
     setStates(st);
     setRide(rd);
     setRideState(rds);
-    setRecent(hist.slice(0, 3));
     const [np, bp] = await Promise.all([
       Notifications.getPermissionsAsync().catch(() => null),
       Location.getBackgroundPermissionsAsync().catch(() => null),
@@ -119,7 +117,7 @@ export default function AlarmsScreen() {
           />
         }
       >
-        <HeroHeader title="내 알림" subtitle={today} right={<HeroPill text={statusText} />} />
+        <HeroHeader title="알림 설정" subtitle={today} right={<HeroPill text={statusText} />} />
         <View style={styles.body}>
         {setup && !setupDone ? (
           <Card>
@@ -193,6 +191,7 @@ export default function AlarmsScreen() {
               query={{ region: a.region, stopNo: a.stopNo, stationId: a.stationId, cityCode: a.cityCode, stopName: a.stopName }}
               highlight={a.routes}
               maxRows={4}
+          pinHighlighted
             />
           </Card>
         ))}
@@ -206,7 +205,7 @@ export default function AlarmsScreen() {
             ) : null
           }
         >
-          내 버스 알림
+          버스 도착 알림
         </SectionTitle>
 
         {alarms.length === 0 ? (
@@ -272,32 +271,6 @@ export default function AlarmsScreen() {
           );
         })}
 
-        <SectionTitle
-          right={
-            <Pressable onPress={() => router.push('/history')} hitSlop={10}>
-              <Text style={{ color: t.primary, fontWeight: '800' }}>전체 보기</Text>
-            </Pressable>
-          }
-        >
-          최근 알림
-        </SectionTitle>
-        <Card>
-          {recent.length === 0 ? (
-            <Muted>아직 받은 알림이 없습니다.</Muted>
-          ) : (
-            recent.map((e, i) => (
-              <ListRow
-                key={e.id}
-                icon={e.kind === 'ride' ? 'flag' : e.kind === 'start' ? 'play-circle' : 'bus'}
-                iconColor={e.kind === 'ride' ? t.success : e.kind === 'start' ? t.warning : t.primary}
-                title={e.title}
-                subtitle={`${new Date(e.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} · ${e.body.split('\n')[0]}`}
-                onPress={() => router.push('/history')}
-                last={i === recent.length - 1}
-              />
-            ))
-          )}
-        </Card>
         <View style={{ height: 80 }} />
         </View>
       </ScrollView>

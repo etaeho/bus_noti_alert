@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useFocusEffect } from 'expo-router';
+import * as Notifications from 'expo-notifications';
+import { router, useFocusEffect } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -25,6 +26,23 @@ function useUnseenCount(): number {
   return n;
 }
 
+/** 앱 실행 시 안 읽은 알림이 있으면 기록 탭부터 보여 준다 (실행당 1회) */
+let launchRouted = false;
+function useOpenHistoryOnLaunch(): void {
+  useEffect(() => {
+    if (!launchRouted) {
+      launchRouted = true;
+      void (async () => {
+        const [list, seen] = await Promise.all([getHistory(), getHistorySeenAt()]);
+        if (list.some((e) => e.at > seen)) router.navigate('/history');
+      })();
+    }
+    // 알림을 눌러 앱을 열면 기록 탭으로
+    const sub = Notifications.addNotificationResponseReceivedListener(() => router.navigate('/history'));
+    return () => sub.remove();
+  }, []);
+}
+
 const icon =
   (on: IconName, off: IconName) =>
   ({ color, size, focused }: { color: unknown; size: number; focused: boolean }) => (
@@ -34,6 +52,7 @@ const icon =
 export default function TabsLayout() {
   const t = useTheme();
   const unseen = useUnseenCount();
+  useOpenHistoryOnLaunch();
   return (
     <Tabs
       screenOptions={{
@@ -46,7 +65,7 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: '정류장', tabBarIcon: icon('location', 'location-outline') }} />
-      <Tabs.Screen name="alarms" options={{ title: '내 알림', tabBarIcon: icon('alarm', 'alarm-outline') }} />
+      <Tabs.Screen name="alarms" options={{ title: '알림 설정', tabBarIcon: icon('alarm', 'alarm-outline') }} />
       <Tabs.Screen name="ride" options={{ title: '하차', tabBarIcon: icon('flag', 'flag-outline') }} />
       <Tabs.Screen
         name="history"

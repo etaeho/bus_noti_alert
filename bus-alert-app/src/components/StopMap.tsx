@@ -42,14 +42,14 @@ const HTML = `<!doctype html><html><head>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
  html,body,#map{margin:0;height:100%;background:#e8ecf2}
- .lbl{background:#fff;border:1px solid #1E6FD9;border-radius:6px;padding:1px 5px;font:600 11px sans-serif;color:#121722;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.2)}
- .lbl.sel{background:#1E6FD9;color:#fff}
+ .lbl{background:#fff;border:1px solid #2563EB;border-radius:8px;padding:2px 6px;font:700 12px sans-serif;color:#111827;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25);cursor:pointer}
+ .lbl.sel{background:#D93B3B;border-color:#D93B3B;color:#fff}
  .leaflet-tooltip.lbl:before{display:none}
  .arrow{font-size:22px;color:#D93B3B;line-height:22px;text-align:center;text-shadow:0 0 3px #fff}
  .me{width:14px;height:14px;border-radius:7px;background:#1E6FD9;border:3px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)}
 </style></head><body><div id="map"></div><script>
 var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify(o))};
-var map=L.map('map',{zoomControl:true,attributionControl:true}).setView([36.35,127.38],15);
+var map=L.map('map',{zoomControl:true,attributionControl:true}).setView([36.35,127.38],16);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',{maxZoom:19,subdomains:'abcd',attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(map);
 var layer=L.layerGroup().addTo(map), meLayer=L.layerGroup().addTo(map), arrowLayer=L.layerGroup().addTo(map);
 var lastKey='';
@@ -60,9 +60,11 @@ window.setData=function(d){
   var pts=[];
   (d.stops||[]).forEach(function(s){
     var sel=s.id===d.selectedId;
-    var m=L.circleMarker([s.latitude,s.longitude],{radius:sel?10:7,color:'#fff',weight:2,fillColor:sel?'#D93B3B':'#1E6FD9',fillOpacity:1}).addTo(layer);
-    m.bindTooltip(s.label,{permanent:true,direction:'top',offset:[0,-8],className:'lbl'+(sel?' sel':'')});
-    m.on('click',function(){post({type:'select',id:s.id})});
+    var m=L.circleMarker([s.latitude,s.longitude],{radius:sel?12:9,color:'#fff',weight:3,fillColor:sel?'#D93B3B':'#2563EB',fillOpacity:1}).addTo(layer);
+    var pick=function(){post({type:'select',id:s.id})};
+    m.bindTooltip(s.label,{permanent:true,interactive:true,direction:'top',offset:[0,-10],className:'lbl'+(sel?' sel':'')});
+    m.on('click',pick);
+    var tip=m.getTooltip(); if(tip&&tip.on){tip.on('click',pick)}
     pts.push([s.latitude,s.longitude]);
   });
   if(d.me){L.marker([d.me.latitude,d.me.longitude],{icon:L.divIcon({className:'',html:'<div class="me"></div>',iconSize:[20,20],iconAnchor:[10,10]}),interactive:false}).addTo(meLayer)}
@@ -76,11 +78,17 @@ window.setData=function(d){
   }
   var key=JSON.stringify(pts)+'|'+d.selectedId;
   if(d.fit&&key!==lastKey){
-    if(sel&&d.arrowTo){map.fitBounds(L.latLngBounds([[sel.latitude,sel.longitude],[d.arrowTo.latitude,d.arrowTo.longitude]]).pad(0.8),{maxZoom:17})}
-    else if(sel){map.setView([sel.latitude,sel.longitude],17)}
-    else if(pts.length>1){map.fitBounds(L.latLngBounds(pts).pad(0.15),{maxZoom:17})}
-    else if(pts.length===1){map.setView(pts[0],16)}
-    else if(d.me){map.setView([d.me.latitude,d.me.longitude],16)}
+    if(sel&&d.arrowTo){map.fitBounds(L.latLngBounds([[sel.latitude,sel.longitude],[d.arrowTo.latitude,d.arrowTo.longitude]]).pad(0.6),{maxZoom:18})}
+    else if(sel){map.setView([sel.latitude,sel.longitude],18)}
+    else if(d.me&&pts.length){
+      // 현재 위치 기준으로 가장 가까운 정류장들만 보이게 가깝게 확대
+      var near=pts.slice().sort(function(a,b){return map.distance(a,[d.me.latitude,d.me.longitude])-map.distance(b,[d.me.latitude,d.me.longitude])}).slice(0,6);
+      near.push([d.me.latitude,d.me.longitude]);
+      map.fitBounds(L.latLngBounds(near).pad(0.15),{maxZoom:18});
+    }
+    else if(pts.length>1){map.fitBounds(L.latLngBounds(pts).pad(0.1),{maxZoom:18})}
+    else if(pts.length===1){map.setView(pts[0],17)}
+    else if(d.me){map.setView([d.me.latitude,d.me.longitude],17)}
   }
   lastKey=key;
 };

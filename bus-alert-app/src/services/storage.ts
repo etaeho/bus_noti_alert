@@ -208,6 +208,8 @@ export interface FavoriteStop {
   stop: StopCandidate;
   /** 예: "대전역 방면" */
   directionLabel: string;
+  /** 사용자가 붙인 이름 (예: "출근 정류장") */
+  nickname?: string;
   addedAt: number;
 }
 const FAVORITES_KEY = 'busalert:favorites:v1';
@@ -221,11 +223,22 @@ export async function getFavorites(): Promise<FavoriteStop[]> {
 export async function isFavorite(key: string): Promise<boolean> {
   return (await getFavorites()).some((f) => f.key === key);
 }
-export async function addFavorite(stop: StopCandidate, directionLabel: string): Promise<void> {
+export async function addFavorite(stop: StopCandidate, directionLabel: string, nickname = ''): Promise<void> {
   const list = await getFavorites();
   const key = stopKeyOf(stop);
-  if (list.some((f) => f.key === key)) return;
-  list.push({ key, stop, directionLabel, addedAt: Date.now() });
+  const existing = list.find((f) => f.key === key);
+  if (existing) {
+    existing.nickname = nickname.trim() || existing.nickname;
+    if (directionLabel) existing.directionLabel = directionLabel;
+  } else {
+    list.push({ key, stop, directionLabel, nickname: nickname.trim(), addedAt: Date.now() });
+  }
+  await writeJson(FAVORITES_KEY, list);
+}
+export async function renameFavorite(key: string, nickname: string): Promise<void> {
+  const list = await getFavorites();
+  const f = list.find((x) => x.key === key);
+  if (f) f.nickname = nickname.trim();
   await writeJson(FAVORITES_KEY, list);
 }
 export async function removeFavorite(key: string): Promise<void> {

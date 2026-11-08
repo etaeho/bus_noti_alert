@@ -33,9 +33,16 @@ export const GoogleStopMap = forwardRef<StopMapHandle, StopMapProps>(function Go
     const coords = sel
       ? [sel, ...(arrowTo ? [arrowTo] : [])].map((p) => ({ latitude: p.latitude, longitude: p.longitude }))
       : stops.map((p) => ({ latitude: p.latitude, longitude: p.longitude }));
+    if (!sel && me && coords.length > 1) {
+      // 현재 위치 기준 가까운 6곳만 보이게 확대
+      const d2 = (p: { latitude: number; longitude: number }) => (p.latitude - me.latitude) ** 2 + (p.longitude - me.longitude) ** 2;
+      coords.sort((a, b) => d2(a) - d2(b));
+      coords.splice(6);
+      coords.push(me);
+    }
     if (coords.length === 0 && me) coords.push(me);
     if (coords.length === 1) {
-      map.current?.animateToRegion({ ...coords[0], latitudeDelta: 0.005, longitudeDelta: 0.005 }, 400);
+      map.current?.animateToRegion({ ...coords[0], latitudeDelta: 0.003, longitudeDelta: 0.003 }, 400);
     } else if (coords.length > 1) {
       map.current?.fitToCoordinates(coords, { edgePadding: { top: 60, right: 60, bottom: 60, left: 60 }, animated: true });
     }
@@ -52,8 +59,8 @@ export const GoogleStopMap = forwardRef<StopMapHandle, StopMapProps>(function Go
         initialRegion={{
           latitude: me?.latitude ?? 36.35,
           longitude: me?.longitude ?? 127.38,
-          latitudeDelta: 0.012,
-          longitudeDelta: 0.012,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
         }}
         showsUserLocation={!!me}
         showsMyLocationButton={false}

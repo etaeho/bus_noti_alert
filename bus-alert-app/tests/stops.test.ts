@@ -142,3 +142,36 @@ describe('두 번째 버스', () => {
     assert.equal(list[0].routeType, '직행좌석');
   });
 });
+
+import { estimateTravelDirection } from '../src/core/geoDirection';
+
+describe('방면 추정 (우측통행)', () => {
+  const base = { region: 'daejeon' as const, cityCode: '25', stopNo: '', stopName: '명석고등학교' };
+  it('도로 동쪽 정류장 → 북쪽 방향', () => {
+    const east = { ...base, stationId: 'E', latitude: 36.31, longitude: 127.3604 };
+    const west = { ...base, stationId: 'W', latitude: 36.31, longitude: 127.3600 };
+    assert.match(estimateTravelDirection(east, [east, west])!.label, /^북쪽/);
+    assert.match(estimateTravelDirection(west, [east, west])!.label, /^남쪽/);
+  });
+  it('짝이 없으면 null', () => {
+    const a = { ...base, stationId: 'A', latitude: 36.31, longitude: 127.36 };
+    assert.equal(estimateTravelDirection(a, [a]), null);
+  });
+  it('노선정보 API 미신청 시 안내 문구 + 위치 추정', async () => {
+    const authErr =
+      '<OpenAPI_ServiceResponse><cmmMsgHeader><errMsg>SERVICE ERROR</errMsg><returnAuthMsg>SERVICE_KEY_IS_NOT_REGISTERED_ERROR</returnAuthMsg></cmmMsgHeader></OpenAPI_ServiceResponse>';
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('getSttnThrghRouteList')) return new Response(JSON.stringify(tago([{ routeid: 'R1', routeno: '311' }])));
+      if (url.includes('getRouteAcctoThrghSttnList')) return new Response(authErr);
+      return new Response('x', { status: 404 });
+    }) as typeof fetch;
+    const east = { ...base, stationId: 'E', latitude: 36.31, longitude: 127.3604 };
+    const west = { ...base, stationId: 'W', latitude: 36.31, longitude: 127.36 };
+    const d = await stopDirection('KEY', east, [east, west]);
+    assert.match(d.label, /북쪽 방향/);
+    assert.equal(d.estimated, true);
+    assert.match(d.note ?? '', /버스노선정보/);
+    assert.deepEqual(d.routes, ['311']);
+  });
+});

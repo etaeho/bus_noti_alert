@@ -25,7 +25,8 @@ import { nearbyStops, regionFromAddress, searchStopsByName, stopDirection } from
 import { REGION_LABELS, type Region, type StopCandidate, type StopDirection } from '../core/types';
 import { setPickedStop } from '../services/pickerStore';
 import { openStopDetail } from '../services/stopNav';
-import { addFavorite, getApiKey, getFavorites, removeFavorite, stopKeyOf } from '../services/storage';
+import { getApiKey, stopKeyOf } from '../services/storage';
+import { useFavorites } from '../components/useFavorites';
 
 const REGIONS = Object.keys(REGION_LABELS) as Region[];
 
@@ -53,28 +54,21 @@ export default function StopPickerScreen() {
   const [selected, setSelected] = useState<string | null>(null);
   const [directions, setDirections] = useState<Record<string, StopDirection | 'loading' | 'error'>>({});
   const mapRef = useRef<StopMapHandle>(null);
-  const [favKeys, setFavKeys] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    void getFavorites().then((l) => setFavKeys(new Set(l.map((f) => f.key))));
-  }, []);
-
-  const toggleFav = async (s: StopCandidate) => {
-    const k = stopKeyOf(s);
-    if (favKeys.has(k)) await removeFavorite(k);
-    else {
-      const d = directions[stopKey(s)];
-      await addFavorite(s, d && typeof d === 'object' ? d.label : '');
-    }
-    setFavKeys(new Set((await getFavorites()).map((f) => f.key)));
+  const fav = useFavorites();
+  const favKeys = fav.keys;
+  const toggleFav = (st: StopCandidate) => {
+    const d = directions[stopKey(st)];
+    void fav.toggle(st, d && typeof d === 'object' ? d.label : '');
   };
+  const resultsRef = useRef<StopCandidate[]>([]);
+  const listRef = useRef<FlatList<StopCandidate>>(null);
   const apiKey = useRef('');
 
   const loadDirection = useCallback(async (s: StopCandidate) => {
     const k = stopKey(s);
     setDirections((d) => (d[k] && d[k] !== 'error' ? d : { ...d, [k]: 'loading' }));
     try {
-      const dir = await stopDirection(apiKey.current, s);
+      const dir = await stopDirection(apiKey.current, s, resultsRef.current);
       setDirections((d) => ({ ...d, [k]: dir }));
     } catch {
       setDirections((d) => ({ ...d, [k]: 'error' }));
@@ -93,11 +87,17 @@ export default function StopPickerScreen() {
         }));
       // 같은 이름(길 건너편 정류장)끼리 붙어 있도록 정렬
       withDist.sort((a, b) => a.stopName.localeCompare(b.stopName, 'ko') || (a.distanceM ?? 0) - (b.distanceM ?? 0));
-      if (byDistance) withDist.sort((a, b) => (a.distanceM ?? 1e9) - (b.distanceM ?? 1e9));
-      setResults(withDist);
+      let shown = withDist;
+      if (byDistance) {
+        withDist.sort((a, b) => (a.distanceM ?? 1e9) - (b.distanceM ?? 1e9));
+        // 지도를 가깝게 보여 주기 위해 가까운 15곳만
+        shown = withDist.slice(0, 15);
+      }
+      resultsRef.current = withDist;
+      setResults(shown);
       setSelected(null);
       // 앞쪽 정류장들의 방면을 미리 불러온다 (동시 3개)
-      const first = withDist.slice(0, 8);
+      const first = shown.slice(0, 8);
       let i = 0;
       const worker = async () => {
         while (i < first.length) await loadDirection(first[i++]);
@@ -226,9 +226,11 @@ export default function StopPickerScreen() {
           <Text style={{ color: t.primary, fontWeight: '700', marginTop: 2 }}>
             {d === 'loading' || d === undefined
               ? '방면 확인 중…'
-              : d === 'error' || !d.label
+              : d === 'error'
                 ? '방면 정보 없음 (지도 위치로 확인)'
-                : `→ ${d.label}`}
+                : d.label
+                  ? `→ ${d.label}`
+                  : d.note || '방면 정보 없음 (지도 위치로 확인)'}
           </Text>
           <Muted>
             {[item.stopNo ? `번호 ${item.stopNo}` : '', formatDist(item.distanceM), REGION_LABELS[item.region]]
@@ -284,8 +286,11 @@ export default function StopPickerScreen() {
               : null
           }
           onSelect={(id) => {
-            const s = results.find((x) => stopKey(x) === id);
-            if (s) select(s);
+            const idx = results.findIndex((x) => stopKey(x) === id);
+            if (idx < 0) return;
+            select(results[idx]);
+            // 지도에서 고른 정류장을 목록에서도 보이게
+            listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0 });
           }}
           height={260}
         />
@@ -325,6 +330,10 @@ export default function StopPickerScreen() {
       ) : null}
 
       <FlatList
+        ref={listRef}
+        onScrollToIndexFailed={(info) =>
+          listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true })
+        }
         data={results}
         keyExtractor={(s, i) => `${stopKey(s)}-${i}`}
         renderItem={renderItem}
@@ -365,6 +374,7 @@ export default function StopPickerScreen() {
           </View>
         </View>
       ) : null}
+      {fav.prompt}
     </KeyboardAvoidingView>
   );
 }

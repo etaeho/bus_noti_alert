@@ -25,6 +25,8 @@ export interface LiveArrivalsProps {
   maxRows?: number;
   /** 즐겨찾기 목록용 작은 표시 (테두리·제목 없이) */
   compact?: boolean;
+  /** 강조한 노선을 맨 위에 고정 (선택용 목록에서는 끔: 누를 때 순서가 바뀌면 헷갈림) */
+  pinHighlighted?: boolean;
 }
 
 interface RouteGroup {
@@ -66,6 +68,7 @@ export function LiveArrivals({
   intervalSec = 15,
   maxRows = 12,
   compact = false,
+  pinHighlighted = false,
 }: LiveArrivalsProps) {
   const t = useTheme();
   const [rows, setRows] = useState<UnifiedArrival[] | null>(null);
@@ -121,9 +124,14 @@ export function LiveArrivals({
 
   const hl = new Set(highlight.map((h) => h.toUpperCase()));
   const groups = group(rows ?? []).sort((a, b) => {
-    const ah = hl.has(a.routeNo.toUpperCase()) ? 0 : 1;
-    const bh = hl.has(b.routeNo.toUpperCase()) ? 0 : 1;
-    return ah - bh || a.buses[0].arrSec - b.buses[0].arrSec;
+    if (pinHighlighted) {
+      const ah = hl.has(a.routeNo.toUpperCase()) ? 0 : 1;
+      const bh = hl.has(b.routeNo.toUpperCase()) ? 0 : 1;
+      if (ah !== bh) return ah - bh;
+    }
+    // 노선을 눌러 선택하는 목록은 번호순으로 고정 (새로고침해도 자리가 바뀌지 않게)
+    if (onRoutePress) return a.routeNo.localeCompare(b.routeNo, 'ko', { numeric: true });
+    return a.buses[0].arrSec - b.buses[0].arrSec;
   });
 
   const body = (

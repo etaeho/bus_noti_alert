@@ -14,7 +14,7 @@ import {
 
 import { LiveArrivals } from '../../components/LiveArrivals';
 import { Button, Card, Chip, Field, Label, Muted, SectionTitle, Stepper, TimeStepper, ToggleRow, useTheme } from '../../components/ui';
-import { fetchArrivals, lookupStop } from '../../core/busApi';
+import { stopDirection } from '../../core/busApi';
 import { formatArrSec } from '../../core/format';
 import { REGION_LABELS, TAGO_CITY_CODES, WEEKDAY_LABELS, type BusAlarm, type Region, type UnifiedArrival, type Weekday } from '../../core/types';
 import { runOnceNow } from '../../services/monitor';
@@ -58,7 +58,6 @@ export default function AlarmEditScreen() {
   const [stopMsg, setStopMsg] = useState('');
   const [arrivals, setArrivals] = useState<UnifiedArrival[] | null>(null);
   const [availableRoutes, setAvailableRoutes] = useState<string[]>([]);
-  const [manual, setManual] = useState(false);
 
   // 정류장 선택 화면에서 돌아오면 결과 반영
   useFocusEffect(
@@ -83,6 +82,31 @@ export default function AlarmEditScreen() {
     }, []),
   );
 
+  // 정류장을 지나는 노선 목록 (기존 알림을 열었을 때)
+  const stopKeyForRoutes = a ? `${a.region}|${a.stationId}|${a.stopNo}` : '';
+  useEffect(() => {
+    if (!a || (!a.stopNo && !a.stationId) || availableRoutes.length) return;
+    let alive = true;
+    (async () => {
+      try {
+        const d = await stopDirection(await getApiKey(), {
+          region: a.region,
+          stopNo: a.stopNo,
+          stationId: a.stationId,
+          cityCode: a.cityCode,
+          stopName: a.stopName,
+        });
+        if (alive && d.routes.length) setAvailableRoutes(d.routes);
+      } catch {
+        // 실시간 도착 정보로 선택 가능
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stopKeyForRoutes]);
+
   useEffect(() => {
     if (isNew) return;
     (async () => {
@@ -105,6 +129,11 @@ export default function AlarmEditScreen() {
       .map((r) => r.trim())
       .filter(Boolean);
   const currentRoutes = parseRoutes(routesText);
+  const routeOptions = [...new Set([...availableRoutes, ...currentRoutes])].sort((x, y) => {
+    const nx = parseInt(x, 10);
+    const ny = parseInt(y, 10);
+    return !Number.isNaN(nx) && !Number.isNaN(ny) && nx !== ny ? nx - ny : x.localeCompare(y, 'ko');
+  });
 
   const toggleRoute = (r: string) => {
     const next = currentRoutes.includes(r) ? currentRoutes.filter((x) => x !== r) : [...currentRoutes, r];
@@ -116,32 +145,6 @@ export default function AlarmEditScreen() {
   };
   const toggleDay = (d: Weekday) =>
     set({ days: a.days.includes(d) ? a.days.filter((x) => x !== d) : ([...a.days, d].sort() as Weekday[]) });
-
-  const checkStop = async () => {
-    setBusy('stop');
-    setStopMsg('');
-    try {
-      const key = await getApiKey();
-      const info = await lookupStop(key, a.region, a.stopNo, a.cityCode);
-      const updated = { ...a, stopNo: info.stopNo, stopName: info.stopName, stationId: info.stationId };
-      setA(updated);
-      setStopMsg(`✅ ${info.stopName}`);
-      const arr = await fetchArrivals(key, { ...updated, routes: [] });
-      setAvailableRoutes([...new Set(arr.map((x) => x.routeNo))].sort());
-    } catch (e) {
-      // 정류소정보 API 미신청이어도 도착정보 API 만으로 동작할 수 있음 (원본의 폴백 동작)
-      try {
-        const arr = await fetchArrivals(await getApiKey(), { ...a, stationId: '', routes: [] });
-        setAvailableRoutes([...new Set(arr.map((x) => x.routeNo))].sort());
-        if (arr[0] && !a.stopName) set({ stopName: arr[0].stopName });
-        setStopMsg(`✅ 도착정보 조회 성공 (${arr.length}건). 정류장 이름은 직접 입력할 수 있습니다.`);
-      } catch {
-        setStopMsg(`⚠️ ${(e as Error).message}`);
-      }
-    } finally {
-      setBusy(null);
-    }
-  };
 
   const build = (): BusAlarm | null => {
     const stopNo = a.stopNo.replace(/-/g, '').trim();
@@ -234,72 +237,26 @@ export default function AlarmEditScreen() {
             onRoutePress={toggleRoute}
           />
 
-          <Pressable onPress={() => setManual(!manual)} style={{ marginTop: 12 }}>
-            <Text style={{ color: t.primary, fontWeight: '600' }}>
-              {manual ? '▾' : '▸'} 정류소 번호로 직접 입력 (고급)
-            </Text>
-          </Pressable>
-          {manual && (
-            <View style={{ marginTop: 10 }}>
-              <Label>권역</Label>
-              <View style={styles.wrap}>
-                {REGIONS.map((r) => (
-                  <Chip
-                    key={r}
-                    label={REGION_LABELS[r]}
-                    selected={a.region === r}
-                    onPress={() => set({ region: r, stationId: '', cityCode: '' })}
-                  />
-                ))}
-              </View>
-              <Label hint="정류장 표지판의 번호 (서울 ARS 번호 / 경기 정류소 번호)">정류소 번호</Label>
-              <View style={styles.row}>
-                <Field
-                  style={{ flex: 1 }}
-                  value={a.stopNo}
-                  onChangeText={(v) => set({ stopNo: v, stationId: '' })}
-                  placeholder="예: 11690"
-                  keyboardType="number-pad"
-                />
-                <Button
-                  title={busy === 'stop' ? '확인 중…' : '정류장 확인'}
-                  variant="secondary"
-                  onPress={checkStop}
-                  disabled={!!busy}
-                  style={{ marginLeft: 8 }}
-                />
-              </View>
-              <View style={{ height: 14 }} />
-              <Label>정류장 이름 (표시용)</Label>
-              <Field value={a.stopName} onChangeText={(v) => set({ stopName: v })} placeholder="자동 입력 또는 직접 입력" />
-              {isTago && (
-                <>
-                  <View style={{ height: 14 }} />
-                  <Label hint={`비워두면 기본값 ${TAGO_CITY_CODES[a.region]} 사용`}>TAGO 도시코드</Label>
-                  <Field
-                    value={a.cityCode}
-                    onChangeText={(v) => set({ cityCode: v.trim() })}
-                    placeholder={TAGO_CITY_CODES[a.region]}
-                    keyboardType="number-pad"
-                  />
-                </>
-              )}
-            </View>
-          )}
-
-          <View style={{ height: 14 }} />
-          <Label hint="쉼표로 구분. 비워두면 정류장의 모든 노선을 감시합니다.">버스 노선 번호</Label>
-          <Field value={routesText} onChangeText={setRoutesText} placeholder="예: 311, 102" autoCapitalize="characters" />
-          {availableRoutes.length > 0 && (
+          {a.stopNo || a.stationId ? (
             <>
-              <Muted style={{ marginTop: 8, marginBottom: 6 }}>이 정류장의 노선 (눌러서 선택)</Muted>
-              <View style={styles.wrap}>
-                {availableRoutes.map((r) => (
-                  <Chip key={r} label={r} selected={currentRoutes.includes(r)} onPress={() => toggleRoute(r)} />
-                ))}
-              </View>
+              <View style={{ height: 16 }} />
+              <Label hint="여러 개 선택 가능 · 하나도 고르지 않으면 이 정류장의 모든 노선을 알려드립니다.">감시할 버스 노선</Label>
+              {routeOptions.length > 0 ? (
+                <View style={styles.wrap}>
+                  {routeOptions.map((r) => (
+                    <Chip key={r} label={r} selected={currentRoutes.includes(r)} onPress={() => toggleRoute(r)} />
+                  ))}
+                </View>
+              ) : (
+                <Muted>노선 목록을 불러오는 중이거나, 위 실시간 도착 정보에서 노선을 눌러 선택할 수 있습니다.</Muted>
+              )}
+              {currentRoutes.length > 0 ? (
+                <Pressable onPress={() => setRoutesText('')} hitSlop={8}>
+                  <Text style={{ color: t.primary, fontWeight: '700', marginTop: 4 }}>선택 해제 (모든 노선)</Text>
+                </Pressable>
+              ) : null}
             </>
-          )}
+          ) : null}
         </Card>
 
         <SectionTitle>② 알림 받을 시간</SectionTitle>

@@ -12,18 +12,21 @@ import { stopDirection } from '../../core/busApi';
 import { REGION_LABELS, type StopDirection } from '../../core/types';
 import { setPickedStop } from '../../services/pickerStore';
 import { stopFromParams } from '../../services/stopNav';
-import { addFavorite, addRecentStop, getApiKey, isFavorite, removeFavorite, stopKeyOf } from '../../services/storage';
+import { useFavorites } from '../../components/useFavorites';
+import { addRecentStop, getApiKey, getFavorites, stopKeyOf } from '../../services/storage';
 
 export default function StopViewScreen() {
   const t = useTheme();
   const params = useLocalSearchParams();
   const { stop, dir: dirParam } = useMemo(() => stopFromParams(params), [params]);
   const key = stopKeyOf(stop);
-  const [fav, setFav] = useState(false);
+  const favs = useFavorites();
+  const fav = favs.keys.has(key);
+  const [nickname, setNickname] = useState('');
   const [direction, setDirection] = useState<StopDirection | null>(null);
 
   useEffect(() => {
-    void isFavorite(key).then(setFav);
+    void getFavorites().then((l) => setNickname(l.find((f) => f.key === key)?.nickname ?? ''));
     (async () => {
       let label = dirParam;
       try {
@@ -40,11 +43,11 @@ export default function StopViewScreen() {
 
   const dirLabel = direction?.label || dirParam;
 
-  const toggleFav = useCallback(async () => {
-    if (fav) await removeFavorite(key);
-    else await addFavorite(stop, dirLabel);
-    setFav(!fav);
-  }, [fav, key, stop, dirLabel]);
+  const toggleFav = useCallback(() => void favs.toggle(stop, dirLabel), [favs, stop, dirLabel]);
+
+  useEffect(() => {
+    void getFavorites().then((l) => setNickname(l.find((f) => f.key === key)?.nickname ?? ''));
+  }, [favs.keys, key]);
 
   const picked = () => ({ stop, direction: direction ?? (dirLabel ? { label: dirLabel, routes: [] } : null) });
 
@@ -67,8 +70,13 @@ export default function StopViewScreen() {
       />
 
       <Card>
+        {fav && nickname ? <Text style={{ color: '#F5B301', fontWeight: '900', marginBottom: 2 }}>⭐ {nickname}</Text> : null}
         <Text style={[styles.name, { color: t.text }]}>🚏 {stop.stopName}</Text>
-        {dirLabel ? <Text style={{ color: t.primary, fontWeight: '800', marginTop: 4 }}>→ {dirLabel}</Text> : null}
+        {dirLabel ? (
+          <Text style={{ color: t.primary, fontWeight: '800', marginTop: 4 }}>→ {dirLabel}</Text>
+        ) : direction?.note ? (
+          <Muted style={{ marginTop: 4 }}>{direction.note}</Muted>
+        ) : null}
         <View style={styles.pills}>
           <Pill text={REGION_LABELS[stop.region]} icon="location" />
           {stop.stopNo ? <Pill text={`정류소 ${stop.stopNo}`} /> : null}
@@ -129,6 +137,7 @@ export default function StopViewScreen() {
         }}
         style={{ marginTop: 10 }}
       />
+      {favs.prompt}
     </ScrollView>
   );
 }

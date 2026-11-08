@@ -168,6 +168,7 @@ export default function RideScreen() {
           query={{ region: r.region, stopNo: r.stopNo, stationId: r.stationId, cityCode: r.cityCode, stopName: r.stopName }}
           highlight={[r.routeNo]}
           maxRows={5}
+          pinHighlighted
         />
         <View style={{ height: 12 }} />
         <Muted style={{ marginBottom: 8 }}>

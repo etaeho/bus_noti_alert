@@ -6,6 +6,8 @@
  */
 import { XMLParser } from 'fast-xml-parser';
 
+import { estimateTravelDirection, findPairStop } from './geoDirection';
+
 import {
   TAGO_CITY_CODES,
   type Region,
@@ -621,7 +623,11 @@ export async function nearbyStops(
  *  - 서울: 도착정보의 다음 정류장(nxtStn)
  *  - 경기: 도착정보의 노선 종점 방향(routeDestName)
  */
-export async function stopDirection(serviceKey: string, stop: StopCandidate): Promise<StopDirection> {
+export async function stopDirection(
+  serviceKey: string,
+  stop: StopCandidate,
+  neighbors?: StopCandidate[],
+): Promise<StopDirection> {
   const key = requireKey(serviceKey);
 
   if (stop.region === 'seoul') {
@@ -651,11 +657,17 @@ export async function stopDirection(serviceKey: string, stop: StopCandidate): Pr
   }
 
   const city = stop.cityCode || TAGO_CITY_CODES[stop.region] || '25';
-  const routeItems = parseTagoResponse(
-    await httpGet(
-      buildUrl(TAGO_STOP_ROUTES_URL, { serviceKey: key, cityCode: city, nodeid: stop.stationId, numOfRows: 60, pageNo: 1, _type: 'json' }),
-    ),
-  );
+  let routeItems: Item[] = [];
+  let note = '';
+  try {
+    routeItems = parseTagoResponse(
+      await httpGet(
+        buildUrl(TAGO_STOP_ROUTES_URL, { serviceKey: key, cityCode: city, nodeid: stop.stationId, numOfRows: 60, pageNo: 1, _type: 'json' }),
+      ),
+    );
+  } catch (e) {
+    note = apiNote(e, '버스정류소정보');
+  }
   const routes = [...new Set(routeItems.map((it) => str(it.routeno)).filter(Boolean))].sort(routeSort);
   // 앞쪽 노선 몇 개로 다음 정류장을 찾는다 (회차 지점 등 예외 대비)
   for (const r of routeItems.slice(0, 3)) {
@@ -676,11 +688,39 @@ export async function stopDirection(serviceKey: string, stop: StopCandidate): Pr
           routes,
         };
       }
-    } catch {
-      // 노선정보 API 미신청 등 → 다음 노선 시도
+    } catch (e) {
+      note = apiNote(e, '버스노선정보');
     }
   }
-  return { label: '', routes };
+  // 노선정보로 못 찾으면 길 건너편 정류장 위치로 추정
+  const est = await estimateFromNeighbors(key, stop, neighbors);
+  if (est) return { label: est.label, routes, estimated: true, note };
+  return { label: '', routes, note: note || '방면 정보를 찾지 못했습니다' };
+}
+
+function apiNote(e: unknown, apiName: string): string {
+  const msg = (e as Error)?.message ?? '';
+  if (/SERVICE_KEY|NOT_REGISTERED|인증|SERVICE ERROR|ACCESS DENIED|LIMITED/i.test(msg)) {
+    return `방면 확인에는 공공데이터포털 'TAGO ${apiName}' 활용신청이 필요합니다`;
+  }
+  return `방면 조회 실패: ${msg.slice(0, 60)}`;
+}
+
+async function estimateFromNeighbors(
+  key: string,
+  stop: StopCandidate,
+  neighbors?: StopCandidate[],
+): Promise<{ label: string } | null> {
+  if (stop.latitude == null || stop.longitude == null) return null;
+  let list = neighbors;
+  if (!list || !findPairStop(stop, list)) {
+    try {
+      list = await nearbyStops(key, stop.region, stop.latitude, stop.longitude);
+    } catch {
+      return null;
+    }
+  }
+  return estimateTravelDirection(stop, list);
 }
 
 function mostCommon(values: string[]): string | undefined {

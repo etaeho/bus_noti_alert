@@ -207,4 +207,8 @@ export interface StopDirection {
   nextLongitude?: number;
   /** 이 정류장을 지나는 노선 번호 */
   routes: string[];
+  /** 방면을 못 구했을 때 이유 (예: API 활용신청 필요) */
+  note?: string;
+  /** 방면이 위치로 추정한 값인지 */
+  estimated?: boolean;
 }
