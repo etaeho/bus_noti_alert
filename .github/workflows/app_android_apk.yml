@@ -5,6 +5,7 @@ name: 버스 알리미 앱 - Android APK
 #  2) "app-dev" 프리릴리스에 bus-alert.apk 로 덮어써서
 #     폰에서 고정 링크로 바로 받을 수 있게 한다:
 #     https://github.com/etaeho/bus_noti_alert/releases/download/app-dev/bus-alert.apk
+# 게시 전에 에뮬레이터에서 실제로 실행해 보고, 크래시가 나면 게시하지 않는다.
 # (Expo 계정 불필요 - GitHub Actions 에서 직접 Gradle 빌드)
 
 on:
@@ -12,6 +13,7 @@ on:
     paths:
       - 'bus-alert-app/**'
       - '.github/workflows/app_android_apk.yml'
+      - '.github/scripts/app_smoke_test.sh'
   workflow_dispatch:
 
 permissions:
@@ -64,10 +66,10 @@ jobs:
           export EXPO_PUBLIC_BUILD_INFO="빌드 #${GITHUB_RUN_NUMBER} · ${GITHUB_REF_NAME} · ${GITHUB_SHA::7}"
           cd android
           chmod +x gradlew
-          # 최신 폰(arm64)용만 빌드해서 시간 단축. 의존성 다운로드 타임아웃 대비 최대 3회 시도
+          # 폰(arm64) + 에뮬레이터 실행 검사(x86_64)용. 의존성 다운로드 타임아웃 대비 최대 3회 시도
           GRADLE_NET="-Dorg.gradle.internal.http.socketTimeout=180000 -Dorg.gradle.internal.http.connectionTimeout=180000 -Dorg.gradle.internal.repository.max.retries=6 -Dorg.gradle.internal.repository.initial.backoff=2000"
           for attempt in 1 2 3; do
-            if ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a $GRADLE_NET; then
+            if ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,x86_64 $GRADLE_NET; then
               break
             fi
             if [ "$attempt" = 3 ]; then exit 1; fi
@@ -78,8 +80,63 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bus-alert-${{ github.run_number }}
+          name: bus-alert-apk
           path: bus-alert-app/bus-alert.apk
+
+  smoke-test:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bus-alert-apk
+
+      - name: KVM 활성화
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: 에뮬레이터에서 실행 검사
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash .github/scripts/app_smoke_test.sh bus-alert.apk
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-test-logs
+          path: smoke/
+
+      - name: 결과 판정
+        run: |
+          RESULT=$(cat smoke/result 2>/dev/null || echo FAIL)
+          {
+            echo "## 🧪 에뮬레이터 실행 검사: $RESULT"
+            echo ""
+            echo '```'
+            tail -60 smoke/errors.txt 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$RESULT" = PASS ]
+
+  publish:
+    needs: smoke-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bus-alert-apk
 
       - name: '"app-dev" 프리릴리스에 게시'
         env:
