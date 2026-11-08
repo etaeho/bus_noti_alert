@@ -44,6 +44,9 @@ jobs:
           java-version: '17'
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # 기본 브랜치가 아니어도 캐시를 저장해서 다음 빌드를 빠르게
+          cache-read-only: false
 
       - name: 의존성 설치
         run: npm ci
@@ -61,8 +64,16 @@ jobs:
           export EXPO_PUBLIC_BUILD_INFO="빌드 #${GITHUB_RUN_NUMBER} · ${GITHUB_REF_NAME} · ${GITHUB_SHA::7}"
           cd android
           chmod +x gradlew
-          # 최신 폰(arm64)용만 빌드해서 시간 단축
-          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+          # 최신 폰(arm64)용만 빌드해서 시간 단축. 의존성 다운로드 타임아웃 대비 최대 3회 시도
+          GRADLE_NET="-Dorg.gradle.internal.http.socketTimeout=180000 -Dorg.gradle.internal.http.connectionTimeout=180000 -Dorg.gradle.internal.repository.max.retries=6 -Dorg.gradle.internal.repository.initial.backoff=2000"
+          for attempt in 1 2 3; do
+            if ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a $GRADLE_NET; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            echo "::warning::Gradle 빌드 실패 (시도 $attempt) — 30초 후 재시도"
+            sleep 30
+          done
           cp app/build/outputs/apk/release/app-release.apk ../bus-alert.apk
 
       - uses: actions/upload-artifact@v4
