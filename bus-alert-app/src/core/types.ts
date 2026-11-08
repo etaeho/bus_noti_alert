@@ -72,7 +72,9 @@ export interface BusAlarm {
   /** 반복 요일 */
   days: Weekday[];
 
-  /** 도착 N분 전 알림 (원본 ALERT_THRESHOLD_MIN) */
+  /** N정거장 전 알림 (예: [3, 2] → 3정거장 전, 2정거장 전 각 1회). 비우면 끔 */
+  stopAlerts?: number[];
+  /** 도착 N분 전 알림 (원본 ALERT_THRESHOLD_MIN). 0 이면 끔 */
   thresholdMin: number;
   /** 조회 간격(초) (원본 POLL_INTERVAL_SEC) */
   pollIntervalSec: number;
@@ -87,24 +89,22 @@ export interface BusAlarm {
   createdAt: number;
 }
 
-/** 하차(내리는 곳) 알림 설정 */
+/** 하차(내리는 곳) 알림 설정: 내릴 정류장의 도착정보로 내 버스가 몇 정거장 전인지 추적 */
 export interface RideAlert {
   active: boolean;
   region: Region;
+  cityCode: string;
   stopNo: string;
+  stationId: string;
   stopName: string;
-  latitude: number;
-  longitude: number;
-  /** 정류장 반경 N미터 이내 진입 시 알림 */
-  radiusM: number;
-  /** 미리 알림: 반경의 몇 배 거리에서 "곧 도착" 예고 (0 이면 끔) */
-  preAlertM: number;
-  /** 하차 알림 반복 횟수 (도착 알림을 놓치지 않도록) */
-  repeatCount: number;
-  /** 반복 간격(초) */
-  repeatIntervalSec: number;
-  startedAt: number;
+  /** 타고 있는 버스 노선 */
   routeNo: string;
+  /** N정거장 전 알림 (예: [3, 2, 1]) */
+  stopAlerts: number[];
+  /** 도착 직전 "지금 내리세요" 알림 */
+  arriveAlert: boolean;
+  pollIntervalSec: number;
+  startedAt: number;
 }
 
 /** 원본 UnifiedArrival */
@@ -133,7 +133,14 @@ export interface StopInfo {
 export interface RouteNotifyState {
   lastArrSec: number;
   lastPlate: string;
+  /** 마지막으로 본 남은 정거장 수 (새 버스 판단용) */
+  lastCnt?: number | null;
+  /** N분 전 알림을 마지막으로 보낸 시각 */
   lastNotifiedAt: number;
+  /** 이 버스에 대해 N분 전 알림을 이미 보냈는지 */
+  minuteNotified?: boolean;
+  /** 이 버스에 대해 이미 보낸 N정거장 전 알림 */
+  notifiedStages?: number[];
 }
 
 /** 알림(alarm)별 런타임 상태 */
@@ -149,11 +156,16 @@ export interface AlarmRuntimeState {
 }
 
 export interface RideRuntimeState {
-  preAlertSent: boolean;
-  arrivedNotifyCount: number;
-  lastArrivedNotifyAt: number;
-  lastDistanceM: number | null;
-  lastLocationAt: number;
+  lastPolledAt: number;
+  /** 추적 중인 차량번호 (제공되는 지역만) */
+  trackedPlate: string;
+  /** 처음 추적할 때 앞에서부터 몇 대를 건너뛸지 ("다음 버스로 바꾸기") */
+  skipBuses: number;
+  notifiedStages: number[];
+  arrivedNotified: boolean;
+  lastCnt: number | null;
+  lastArrSec: number | null;
+  lastError: string;
 }
 
 export interface AppSettings {

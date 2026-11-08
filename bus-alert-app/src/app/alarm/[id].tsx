@@ -22,6 +22,7 @@ import { applyMonitoringChanges } from '../../services/runtime';
 import { deleteAlarm, getAlarms, getApiKey, upsertAlarm } from '../../services/storage';
 
 const REGIONS = Object.keys(REGION_LABELS) as Region[];
+const STAGES = [5, 4, 3, 2, 1];
 
 function newAlarm(): BusAlarm {
   return {
@@ -34,10 +35,11 @@ function newAlarm(): BusAlarm {
     stationId: '',
     cityCode: '',
     routes: [],
-    windowStart: { hour: 7, minute: 20 },
-    windowEnd: { hour: 7, minute: 40 },
+    windowStart: { hour: 7, minute: 0 },
+    windowEnd: { hour: 7, minute: 30 },
     days: [1, 2, 3, 4, 5],
-    thresholdMin: 5,
+    stopAlerts: [3, 2],
+    thresholdMin: 0,
     pollIntervalSec: 60,
     repeatIntervalMin: 0,
     sendStartSummary: true,
@@ -107,6 +109,10 @@ export default function AlarmEditScreen() {
     const next = currentRoutes.includes(r) ? currentRoutes.filter((x) => x !== r) : [...currentRoutes, r];
     setRoutesText(next.join(', '));
   };
+  const toggleStage = (n: number) => {
+    const cur = a.stopAlerts ?? [];
+    set({ stopAlerts: cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n].sort((x, y) => y - x) });
+  };
   const toggleDay = (d: Weekday) =>
     set({ days: a.days.includes(d) ? a.days.filter((x) => x !== d) : ([...a.days, d].sort() as Weekday[]) });
 
@@ -140,6 +146,10 @@ export default function AlarmEditScreen() {
     const stopNo = a.stopNo.replace(/-/g, '').trim();
     if (!stopNo && !a.stationId) {
       Alert.alert('입력 확인', '정류장을 선택해 주세요.');
+      return null;
+    }
+    if (!(a.stopAlerts ?? []).length && a.thresholdMin <= 0) {
+      Alert.alert('알림 기준', "'몇 정거장 전' 또는 '도착 몇 분 전' 중 하나는 설정해 주세요.");
       return null;
     }
     return { ...a, stopNo, routes: currentRoutes, label: a.label.trim() };
@@ -313,11 +323,22 @@ export default function AlarmEditScreen() {
 
         <SectionTitle>알림 방식</SectionTitle>
         <Card>
-          <View style={styles.settingRow}>
+          <Label hint="여러 개 선택 가능 · 각 단계마다 한 번씩 알림">몇 정거장 전에 알릴까요?</Label>
+          <View style={styles.wrap}>
+            {STAGES.map((n) => (
+              <Chip
+                key={n}
+                label={`${n}정거장 전`}
+                selected={(a.stopAlerts ?? []).includes(n)}
+                onPress={() => toggleStage(n)}
+              />
+            ))}
+          </View>
+          <View style={[styles.settingRow, { marginTop: 6 }]}>
             <View style={{ flex: 1 }}>
-              <Label hint="버스가 이 시간 안으로 들어오면 알림">도착 몇 분 전</Label>
+              <Label hint="버스가 이 시간 안으로 들어오면 알림 (0 = 사용 안 함)">도착 몇 분 전 (선택)</Label>
             </View>
-            <Stepper value={a.thresholdMin} onChange={(v) => set({ thresholdMin: v })} min={1} max={30} unit="분" />
+            <Stepper value={a.thresholdMin} onChange={(v) => set({ thresholdMin: v })} min={0} max={30} unit="분" />
           </View>
           <View style={styles.settingRow}>
             <View style={{ flex: 1 }}>
@@ -334,7 +355,7 @@ export default function AlarmEditScreen() {
           </View>
           <View style={styles.settingRow}>
             <View style={{ flex: 1 }}>
-              <Label hint="같은 버스를 도착 전까지 N분마다 다시 알림 (0 = 1번만)">반복 알림 간격</Label>
+              <Label hint="'몇 분 전' 알림을 같은 버스 도착 전까지 N분마다 반복 (0 = 1번만)">반복 알림 간격</Label>
             </View>
             <Stepper
               value={a.repeatIntervalMin}
@@ -380,7 +401,7 @@ export default function AlarmEditScreen() {
               arrivals.map((x, i) => (
                 <View key={`${x.routeNo}-${i}`} style={{ marginBottom: 8 }}>
                   <Text style={{ color: t.text, fontWeight: '700' }}>
-                    {x.routeNo}번 · {formatArrSec(x.arrSec)} 후 · {x.prevStationCnt}정류장 전
+                    {x.routeNo}번 · {x.prevStationCnt}정거장 전 · {formatArrSec(x.arrSec)} 후
                   </Text>
                   {x.extraInfo ? <Muted>{x.extraInfo}</Muted> : null}
                 </View>

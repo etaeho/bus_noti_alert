@@ -85,7 +85,10 @@ export async function saveAllAlarmStates(states: Record<string, AlarmRuntimeStat
 
 // ── 하차 알림 ──
 export async function getRide(): Promise<RideAlert | null> {
-  return readJson<RideAlert | null>(K.ride, null);
+  const r = await readJson<RideAlert | null>(K.ride, null);
+  // 이전 버전(GPS 거리 방식) 데이터는 무시
+  if (!r || !Array.isArray(r.stopAlerts) || typeof r.routeNo !== 'string') return null;
+  return r;
 }
 export async function saveRide(ride: RideAlert | null): Promise<void> {
   if (ride) await writeJson(K.ride, ride);
@@ -93,7 +96,7 @@ export async function saveRide(ride: RideAlert | null): Promise<void> {
   await writeJson(K.rideState, emptyRideState());
 }
 export async function getRideState(): Promise<RideRuntimeState> {
-  return readJson<RideRuntimeState>(K.rideState, emptyRideState());
+  return { ...emptyRideState(), ...(await readJson<Partial<RideRuntimeState>>(K.rideState, {})) };
 }
 export async function saveRideState(s: RideRuntimeState): Promise<void> {
   await writeJson(K.rideState, s);

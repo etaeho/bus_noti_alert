@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-import { toPlainText } from '../core/format';
+import { describeAlertRule, toPlainText } from '../core/format';
 import type { BusAlarm } from '../core/types';
 import type { OutgoingNotification } from '../core/decide';
 import { appendLog, getSettings, getTelegramToken } from './storage';
@@ -99,7 +99,7 @@ export async function rescheduleReminders(alarms: BusAlarm[]): Promise<void> {
         identifier: `reminder_${a.id}_${d}`,
         content: {
           title: `🕖 ${a.label || '버스 알림'} 감시 시간입니다`,
-          body: `${a.stopName || a.stopNo} · ${a.routes.join(', ') || '전체'}번 — 도착 ${a.thresholdMin}분 전에 알려드립니다.`,
+          body: `${a.stopName || a.stopNo} · ${a.routes.join(', ') || '전체'}번 — ${describeAlertRule(a)}에 알려드립니다.`,
           data: { alarmId: a.id, reminder: true },
         },
         trigger: {

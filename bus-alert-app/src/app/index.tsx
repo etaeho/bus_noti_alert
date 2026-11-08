@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { Button, Card, Muted, SectionTitle, useTheme } from '../components/ui';
-import { formatArrSec } from '../core/format';
+import { describeAlertRule, formatArrSec } from '../core/format';
 import { describeDays, formatTime, getActiveWindow, getNextWindowStart } from '../core/schedule';
 import { REGION_LABELS, type AlarmRuntimeState, type BusAlarm, type RideAlert, type RideRuntimeState } from '../core/types';
 import { applyMonitoringChanges, useMonitoringStatus } from '../services/runtime';
@@ -73,14 +73,18 @@ export default function HomeScreen() {
             <>
               <Text style={[styles.title, { color: t.text }]}>🚏 {ride.stopName || ride.stopNo}</Text>
               <Muted>
-                {ride.routeNo ? `${ride.routeNo}번 탑승 · ` : ''}반경 {ride.radiusM}m 진입 시 알림
-                {rideState?.lastDistanceM != null ? ` · 현재 약 ${rideState.lastDistanceM}m` : ''}
+                {ride.routeNo}번 탑승 ·{' '}
+                {rideState?.lastCnt != null
+                  ? rideState.lastCnt <= 0
+                    ? '곧 도착'
+                    : `${rideState.lastCnt}정거장 전`
+                  : '버스 확인 중'}
               </Muted>
             </>
           ) : (
             <>
               <Text style={[styles.title, { color: t.text }]}>내릴 정류장 알림 설정</Text>
-              <Muted>버스에 탄 뒤 내릴 정류장을 지정하면 가까워질 때 알려드립니다.</Muted>
+              <Muted>버스에 탄 뒤 내릴 정류장을 고르면 몇 정거장 전인지 알려드립니다.</Muted>
             </>
           )}
         </Card>
@@ -121,9 +125,9 @@ export default function HomeScreen() {
               <View style={styles.tags}>
                 <Tag text={`${formatTime(a.windowStart)}~${formatTime(a.windowEnd)}`} />
                 <Tag text={describeDays(a.days)} />
-                <Tag text={`${a.thresholdMin}분 전`} />
+                <Tag text={describeAlertRule(a)} />
                 <Tag text={`${a.pollIntervalSec}초 간격`} />
-                {a.repeatIntervalMin > 0 && <Tag text={`${a.repeatIntervalMin}분마다 반복`} />}
+                {a.repeatIntervalMin > 0 && a.thresholdMin > 0 && <Tag text={`${a.repeatIntervalMin}분마다 반복`} />}
                 <Tag text={a.routes.length ? `${a.routes.join(', ')}번` : '전체 노선'} />
               </View>
               {win ? (
@@ -136,7 +140,7 @@ export default function HomeScreen() {
                   {showArrivals &&
                     st.lastArrivals.slice(0, 4).map((arr, i) => (
                       <Muted key={`${arr.routeNo}-${i}`}>
-                        {arr.routeNo}번 · {formatArrSec(arr.arrSec)} 후 · {arr.prevStationCnt}정류장 전
+                        {arr.routeNo}번 · {arr.prevStationCnt}정거장 전 · {formatArrSec(arr.arrSec)} 후
                       </Muted>
                     ))}
                 </View>

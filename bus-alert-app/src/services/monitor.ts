@@ -3,8 +3,6 @@
  * 위치 업데이트 태스크 / 백그라운드 태스크 / 포그라운드 타이머 어디서 호출돼도
  * 각 알림의 조회 간격(pollIntervalSec)을 지키며 한 번씩만 조회한다.
  */
-import * as Location from 'expo-location';
-
 import { fetchArrivals } from '../core/busApi';
 import { decideAlarmNotifications, decideRide, emptyAlarmState, type OutgoingNotification } from '../core/decide';
 import { formatArrivalMessage } from '../core/format';
@@ -28,10 +26,7 @@ import {
 let running: Promise<void> | null = null;
 
 export interface TickOptions {
-  location?: { latitude: number; longitude: number } | null;
-  /** 지오펜스 진입 이벤트 등으로 하차 정류장 도착이 확정된 경우 */
-  forceRideArrived?: boolean;
-  source: 'location' | 'background' | 'foreground' | 'geofence';
+  source: 'location' | 'background' | 'foreground';
 }
 
 export function runMonitorTick(opts: TickOptions): Promise<void> {
@@ -40,7 +35,7 @@ export function runMonitorTick(opts: TickOptions): Promise<void> {
     if (!(await tryAcquireLock(25_000))) return;
     try {
       await tickAlarms();
-      await tickRide(opts);
+      await tickRide();
     } catch (e) {
       await appendLog(`[${opts.source}] 감시 오류: ${(e as Error).message}`);
     } finally {
@@ -96,26 +91,33 @@ async function tickAlarms(): Promise<void> {
   if (changed) await saveAllAlarmStates(states);
 }
 
-async function tickRide(opts: TickOptions): Promise<void> {
+async function tickRide(): Promise<void> {
   const ride = await getRide();
   if (!ride?.active) return;
-  let loc = opts.location ?? null;
-  if (!loc) {
-    try {
-      const last = await Location.getLastKnownPositionAsync({ maxAge: 90_000 });
-      if (last) loc = last.coords;
-    } catch {
-      // 위치 권한 없음 등
-    }
-  }
   const prev = await getRideState();
-  const { notifications, state, finished } = decideRide(ride, prev, loc, Date.now(), opts.forceRideArrived);
+  const now = Date.now();
+  if (now - prev.lastPolledAt < (ride.pollIntervalSec || 30) * 1000 - 3000) return;
+  let arrivals;
+  try {
+    arrivals = await fetchArrivals(await getApiKey(), {
+      region: ride.region,
+      stopNo: ride.stopNo,
+      stationId: ride.stationId,
+      cityCode: ride.cityCode,
+      stopName: ride.stopName,
+      routes: [ride.routeNo],
+    });
+  } catch (e) {
+    await saveRideState({ ...prev, lastPolledAt: now, lastError: (e as Error).message });
+    return;
+  }
+  const { notifications, state, finished } = decideRide(ride, prev, arrivals, now);
   await saveRideState(state);
   for (const n of notifications) await deliver(n, CHANNEL_RIDE);
   if (finished) {
     await saveRide({ ...ride, active: false });
     await saveRideState(state);
-    await appendLog(`하차 알림 완료: ${ride.stopName || ride.stopNo}`);
+    await appendLog(`하차 알림 완료: ${ride.routeNo}번 → ${ride.stopName || ride.stopNo}`);
   }
 }
 
