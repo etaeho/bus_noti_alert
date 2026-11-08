@@ -24,7 +24,8 @@ import { distanceM } from '../core/decide';
 import { nearbyStops, regionFromAddress, searchStopsByName, stopDirection } from '../core/busApi';
 import { REGION_LABELS, type Region, type StopCandidate, type StopDirection } from '../core/types';
 import { setPickedStop } from '../services/pickerStore';
-import { getApiKey } from '../services/storage';
+import { openStopDetail } from '../services/stopNav';
+import { addFavorite, getApiKey, getFavorites, removeFavorite, stopKeyOf } from '../services/storage';
 
 const REGIONS = Object.keys(REGION_LABELS) as Region[];
 
@@ -39,7 +40,7 @@ function formatDist(m?: number): string {
 
 export default function StopPickerScreen() {
   const t = useTheme();
-  const params = useLocalSearchParams<{ purpose?: string; region?: string }>();
+  const params = useLocalSearchParams<{ purpose?: string; region?: string; focus?: string }>();
   const purpose = params.purpose ?? 'alarm';
 
   const [region, setRegion] = useState<Region>((params.region as Region) || 'daejeon');
@@ -52,6 +53,21 @@ export default function StopPickerScreen() {
   const [selected, setSelected] = useState<string | null>(null);
   const [directions, setDirections] = useState<Record<string, StopDirection | 'loading' | 'error'>>({});
   const mapRef = useRef<StopMapHandle>(null);
+  const [favKeys, setFavKeys] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    void getFavorites().then((l) => setFavKeys(new Set(l.map((f) => f.key))));
+  }, []);
+
+  const toggleFav = async (s: StopCandidate) => {
+    const k = stopKeyOf(s);
+    if (favKeys.has(k)) await removeFavorite(k);
+    else {
+      const d = directions[stopKey(s)];
+      await addFavorite(s, d && typeof d === 'object' ? d.label : '');
+    }
+    setFavKeys(new Set((await getFavorites()).map((f) => f.key)));
+  };
   const apiKey = useRef('');
 
   const loadDirection = useCallback(async (s: StopCandidate) => {
@@ -182,6 +198,10 @@ export default function StopPickerScreen() {
 
   const confirm = () => {
     if (!selectedStop) return;
+    if (purpose === 'view') {
+      openStopDetail(selectedStop, dirObj?.label ?? '', true);
+      return;
+    }
     setPickedStop(purpose, { stop: selectedStop, direction: dirObj });
     router.back();
   };
@@ -199,7 +219,10 @@ export default function StopPickerScreen() {
         ]}
       >
         <View style={{ flex: 1 }}>
-          <Text style={[styles.itemTitle, { color: t.text }]}>🚏 {item.stopName}</Text>
+          <Text style={[styles.itemTitle, { color: t.text }]}>
+            {favKeys.has(stopKeyOf(item)) ? '⭐ ' : '🚏 '}
+            {item.stopName}
+          </Text>
           <Text style={{ color: t.primary, fontWeight: '700', marginTop: 2 }}>
             {d === 'loading' || d === undefined
               ? '방면 확인 중…'
@@ -225,7 +248,9 @@ export default function StopPickerScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Stack.Screen options={{ title: purpose === 'ride' ? '내릴 정류장 선택' : '정류장 선택' }} />
+      <Stack.Screen
+        options={{ title: purpose === 'ride' ? '내릴 정류장 선택' : purpose === 'view' ? '정류장 검색' : '정류장 선택' }}
+      />
       <View style={[styles.top, { backgroundColor: t.card, borderColor: t.border }]}>
         <View style={styles.searchRow}>
           <TextInput
@@ -233,6 +258,7 @@ export default function StopPickerScreen() {
             onChangeText={setQuery}
             onSubmitEditing={runSearch}
             returnKeyType="search"
+            autoFocus={params.focus === '1'}
             placeholder="정류장 이름 검색 (예: 명석고)"
             placeholderTextColor={t.sub}
             style={[styles.search, { backgroundColor: t.inputBg, borderColor: t.border, color: t.text }]}
@@ -324,7 +350,19 @@ export default function StopPickerScreen() {
               maxRows={8}
             />
           </ScrollView>
-          <Button title="이 정류장 선택" onPress={confirm} style={{ marginTop: 8 }} />
+          <View style={{ flexDirection: 'row', marginTop: 8 }}>
+            <Button
+              title={favKeys.has(stopKeyOf(selectedStop)) ? '★' : '☆'}
+              variant="secondary"
+              onPress={() => void toggleFav(selectedStop)}
+              style={{ marginRight: 8, paddingHorizontal: 18 }}
+            />
+            <Button
+              title={purpose === 'view' ? '도착 정보 크게 보기' : '이 정류장 선택'}
+              onPress={confirm}
+              style={{ flex: 1 }}
+            />
+          </View>
         </View>
       ) : null}
     </KeyboardAvoidingView>

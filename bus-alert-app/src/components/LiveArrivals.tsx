@@ -20,13 +20,22 @@ export interface LiveArrivalsProps {
   onRoutePress?: (routeNo: string) => void;
   intervalSec?: number;
   maxRows?: number;
+  /** 즐겨찾기 목록용 작은 표시 (테두리·제목 없이) */
+  compact?: boolean;
 }
 
 function timeLabel(d: Date): string {
   return d.toLocaleTimeString('ko-KR', { hour12: false });
 }
 
-export function LiveArrivals({ query, highlight = [], onRoutePress, intervalSec = 15, maxRows = 12 }: LiveArrivalsProps) {
+export function LiveArrivals({
+  query,
+  highlight = [],
+  onRoutePress,
+  intervalSec = 15,
+  maxRows = 12,
+  compact = false,
+}: LiveArrivalsProps) {
   const t = useTheme();
   const [rows, setRows] = useState<UnifiedArrival[] | null>(null);
   const [error, setError] = useState('');
@@ -85,8 +94,8 @@ export function LiveArrivals({ query, highlight = [], onRoutePress, intervalSec 
   });
 
   return (
-    <View style={[styles.wrap, { borderColor: t.border, backgroundColor: t.card }]}>
-      <View style={styles.header}>
+    <View style={compact ? { marginTop: 6 } : [styles.wrap, { borderColor: t.border, backgroundColor: t.card }]}>
+      <View style={[styles.header, compact && { display: 'none' }]}>
         <Text style={[styles.title, { color: t.text }]}>🚌 실시간 도착 정보</Text>
         <Pressable onPress={() => void load()} hitSlop={10} accessibilityRole="button" accessibilityLabel="새로고침">
           {loading ? (
@@ -117,7 +126,7 @@ export function LiveArrivals({ query, highlight = [], onRoutePress, intervalSec 
               <Text style={{ color: soon ? t.danger : t.text, fontWeight: '700', fontSize: 15 }}>
                 {a.prevStationCnt}정거장 전 · {formatArrSec(a.arrSec)} 후
               </Text>
-              {a.extraInfo || a.vehicleIdOrPlate ? (
+              {!compact && (a.extraInfo || a.vehicleIdOrPlate) ? (
                 <Text numberOfLines={1} style={{ color: t.sub, fontSize: 12 }}>
                   {[a.vehicleIdOrPlate && !a.extraInfo.includes(a.vehicleIdOrPlate) ? a.vehicleIdOrPlate : '', a.extraInfo]
                     .filter(Boolean)
@@ -131,7 +140,7 @@ export function LiveArrivals({ query, highlight = [], onRoutePress, intervalSec 
       })}
 
       <Muted style={{ marginTop: 6, fontSize: 12 }}>
-        {updatedAt ? `${timeLabel(updatedAt)} 기준 · ${intervalSec}초마다 자동 갱신` : ''}
+        {updatedAt ? (compact ? `${timeLabel(updatedAt)} 기준` : `${timeLabel(updatedAt)} 기준 · ${intervalSec}초마다 자동 갱신`) : ''}
         {onRoutePress ? ' · 노선을 누르면 선택/해제' : ''}
       </Muted>
     </View>

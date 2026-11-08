@@ -14,6 +14,7 @@ import {
   type BusAlarm,
   type RideAlert,
   type RideRuntimeState,
+  type StopCandidate,
 } from '../core/types';
 
 const K = {
@@ -199,4 +200,54 @@ export async function getHistorySeenAt(): Promise<number> {
 }
 export async function markHistorySeen(): Promise<void> {
   await AsyncStorage.setItem(HISTORY_SEEN_KEY, String(Date.now()));
+}
+
+// ── 즐겨찾기 정류장 ──
+export interface FavoriteStop {
+  key: string;
+  stop: StopCandidate;
+  /** 예: "대전역 방면" */
+  directionLabel: string;
+  addedAt: number;
+}
+const FAVORITES_KEY = 'busalert:favorites:v1';
+
+export function stopKeyOf(s: Pick<StopCandidate, 'region' | 'stationId' | 'stopNo'>): string {
+  return `${s.region}:${s.stationId || s.stopNo}`;
+}
+export async function getFavorites(): Promise<FavoriteStop[]> {
+  return readJson<FavoriteStop[]>(FAVORITES_KEY, []);
+}
+export async function isFavorite(key: string): Promise<boolean> {
+  return (await getFavorites()).some((f) => f.key === key);
+}
+export async function addFavorite(stop: StopCandidate, directionLabel: string): Promise<void> {
+  const list = await getFavorites();
+  const key = stopKeyOf(stop);
+  if (list.some((f) => f.key === key)) return;
+  list.push({ key, stop, directionLabel, addedAt: Date.now() });
+  await writeJson(FAVORITES_KEY, list);
+}
+export async function removeFavorite(key: string): Promise<void> {
+  await writeJson(FAVORITES_KEY, (await getFavorites()).filter((f) => f.key !== key));
+}
+export async function moveFavorite(key: string, delta: -1 | 1): Promise<void> {
+  const list = await getFavorites();
+  const i = list.findIndex((f) => f.key === key);
+  const j = i + delta;
+  if (i < 0 || j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  await writeJson(FAVORITES_KEY, list);
+}
+
+// ── 최근 본 정류장 ──
+const RECENT_STOPS_KEY = 'busalert:recentStops:v1';
+export async function getRecentStops(): Promise<FavoriteStop[]> {
+  return readJson<FavoriteStop[]>(RECENT_STOPS_KEY, []);
+}
+export async function addRecentStop(stop: StopCandidate, directionLabel: string): Promise<void> {
+  const key = stopKeyOf(stop);
+  const list = (await getRecentStops()).filter((f) => f.key !== key);
+  list.unshift({ key, stop, directionLabel, addedAt: Date.now() });
+  await writeJson(RECENT_STOPS_KEY, list.slice(0, 8));
 }

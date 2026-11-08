@@ -45,7 +45,15 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: '홈',
+          title: '정류장',
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => <Ionicons name="location" color={String(color)} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="alarms"
+        options={{
+          title: '내 알림',
           headerShown: false,
           tabBarIcon: ({ color, size }) => <Ionicons name="bus" color={String(color)} size={size} />,
         }}
@@ -53,14 +61,16 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="ride"
         options={{
-          title: '하차 알림',
+          title: '하차',
+          headerTitle: '하차 알림',
           tabBarIcon: ({ color, size }) => <Ionicons name="flag" color={String(color)} size={size} />,
         }}
       />
       <Tabs.Screen
         name="history"
         options={{
-          title: '알림 기록',
+          title: '기록',
+          headerTitle: '알림 기록',
           tabBarBadge: unseen > 0 ? (unseen > 99 ? '99+' : unseen) : undefined,
           tabBarIcon: ({ color, size }) => <Ionicons name="notifications" color={String(color)} size={size} />,
         }}
