@@ -1,16 +1,15 @@
 import * as Location from 'expo-location';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Button, Card, Chip, Field, Label, Muted, SectionTitle, Stepper, useTheme } from '../components/ui';
-import { lookupStop } from '../core/busApi';
+import { Button, Card, Field, Label, Muted, SectionTitle, Stepper, useTheme } from '../components/ui';
 import { distanceM } from '../core/decide';
-import { REGION_LABELS, type Region, type RideAlert, type RideRuntimeState } from '../core/types';
+import { REGION_LABELS, type RideAlert, type RideRuntimeState } from '../core/types';
 import { requestLocationPermissions } from '../services/background';
+import { displayStopName, takePickedStop } from '../services/pickerStore';
 import { applyMonitoringChanges } from '../services/runtime';
 import { getAlarms, getApiKey, getRide, getRideState, saveRide } from '../services/storage';
-
-const REGIONS = Object.keys(REGION_LABELS) as Region[];
 
 function defaultRide(): RideAlert {
   return {
@@ -52,6 +51,28 @@ export default function RideScreen() {
     void load();
   }, [load]);
 
+  // 정류장 선택 화면에서 돌아오면 좌표까지 반영
+  useFocusEffect(
+    useCallback(() => {
+      const picked = takePickedStop('ride');
+      if (!picked) return;
+      const { stop } = picked;
+      setR((p) => ({
+        ...p,
+        region: stop.region,
+        stopNo: stop.stopNo,
+        stopName: displayStopName(picked),
+        latitude: stop.latitude ?? p.latitude,
+        longitude: stop.longitude ?? p.longitude,
+      }));
+      setMsg(
+        stop.latitude && stop.longitude
+          ? `✅ 하차 지점: ${stop.latitude.toFixed(5)}, ${stop.longitude.toFixed(5)}`
+          : '⚠️ 이 정류장은 좌표 정보가 없습니다. 정류장에서 "현재 위치로 지정"을 사용해 주세요.',
+      );
+    }, []),
+  );
+
   // 진행 중이면 화면에서 실시간 거리 표시
   useEffect(() => {
     if (!r.active) return;
@@ -77,25 +98,6 @@ export default function RideScreen() {
 
   const set = (patch: Partial<RideAlert>) => setR({ ...r, ...patch });
   const hasCoords = r.latitude !== 0 && r.longitude !== 0;
-
-  const lookup = async () => {
-    setBusy('lookup');
-    setMsg('');
-    try {
-      const info = await lookupStop(await getApiKey(), r.region, r.stopNo);
-      if (info.latitude === undefined || info.longitude === undefined) {
-        set({ stopName: info.stopName });
-        setMsg('⚠️ 정류장 좌표를 받지 못했습니다. 정류장에서 "현재 위치로 지정"을 사용하거나 좌표를 직접 입력해 주세요.');
-      } else {
-        set({ stopName: info.stopName, stopNo: info.stopNo, latitude: info.latitude, longitude: info.longitude });
-        setMsg(`✅ ${info.stopName} (${info.latitude.toFixed(5)}, ${info.longitude.toFixed(5)})`);
-      }
-    } catch (e) {
-      setMsg(`⚠️ ${(e as Error).message}`);
-    } finally {
-      setBusy(null);
-    }
-  };
 
   const useCurrentLocation = async () => {
     setBusy('loc');
@@ -177,29 +179,18 @@ export default function RideScreen() {
 
         <SectionTitle>내릴 정류장</SectionTitle>
         <Card>
-          <Label>권역</Label>
-          <View style={styles.wrap}>
-            {REGIONS.map((rg) => (
-              <Chip key={rg} label={REGION_LABELS[rg]} selected={r.region === rg} onPress={() => set({ region: rg })} />
-            ))}
-          </View>
-          <Label>정류소 번호</Label>
-          <View style={styles.row}>
-            <Field
-              style={{ flex: 1 }}
-              value={r.stopNo}
-              onChangeText={(v) => set({ stopNo: v })}
-              placeholder="예: 11690"
-              keyboardType="number-pad"
-            />
-            <Button
-              title={busy === 'lookup' ? '조회 중…' : '조회'}
-              variant="secondary"
-              onPress={lookup}
-              disabled={!!busy}
-              style={{ marginLeft: 8 }}
-            />
-          </View>
+          {r.stopName ? (
+            <View style={[styles.stopBox, { borderColor: t.border, backgroundColor: t.inputBg }]}>
+              <Text style={{ color: t.text, fontSize: 16, fontWeight: '700' }}>🚏 {r.stopName}</Text>
+              <Muted>{[REGION_LABELS[r.region], r.stopNo ? `번호 ${r.stopNo}` : ''].filter(Boolean).join(' · ')}</Muted>
+            </View>
+          ) : null}
+          <Button
+            title={r.stopName ? '🔍 정류장 다시 찾기' : '🔍 정류장 이름 검색 / 지도에서 선택'}
+            variant={r.stopName ? 'secondary' : 'primary'}
+            onPress={() => router.push({ pathname: '/stop-picker', params: { purpose: 'ride' } })}
+            style={{ marginTop: 8 }}
+          />
           <View style={{ height: 12 }} />
           <Label>정류장 이름</Label>
           <Field value={r.stopName} onChangeText={(v) => set({ stopName: v })} placeholder="표시용 이름" />
@@ -282,5 +273,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center' },
   settingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   big: { fontSize: 22, fontWeight: '800', marginVertical: 6 },
+  stopBox: { borderWidth: 1, borderRadius: 10, padding: 12 },
   dist: { fontSize: 44, fontWeight: '800', marginVertical: 10, fontVariant: ['tabular-nums'] },
 });

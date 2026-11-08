@@ -23,9 +23,16 @@ for i in $(seq 1 40); do
   if [ -n "$P" ] && [ -z "$FIRST_PID" ]; then FIRST_PID="$P"; fi
   sleep 1
 done
-PID=$(adb shell pidof "$PKG" | tr -d '\r')
 adb exec-out screencap -p > "$OUT/screen.png" || true
 adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 && adb pull /sdcard/ui.xml "$OUT/ui.xml" > /dev/null 2>&1 || true
+
+# 정류장 선택 화면(지도 WebView)도 열어 본다
+adb shell am start -a android.intent.action.VIEW -d "busalert://stop-picker" "$PKG" > /dev/null 2>&1 || true
+sleep 15
+adb exec-out screencap -p > "$OUT/screen_picker.png" || true
+adb shell uiautomator dump /sdcard/ui2.xml > /dev/null 2>&1 && adb pull /sdcard/ui2.xml "$OUT/ui_picker.xml" > /dev/null 2>&1 || true
+
+PID=$(adb shell pidof "$PKG" | tr -d '\r')
 adb logcat -d > "$OUT/logcat.txt"
 
 {
@@ -44,6 +51,8 @@ adb logcat -d > "$OUT/logcat.txt"
 echo "=== 프로세스 PID: ${PID:-없음(종료됨)} ==="
 echo "=== 화면 텍스트 ==="
 grep -oE 'text="[^"]+"' "$OUT/ui.xml" 2>/dev/null | head -40 || true
+echo "=== 정류장 선택 화면 텍스트 ==="
+grep -oE 'text="[^"]+"' "$OUT/ui_picker.xml" 2>/dev/null | head -30 || true
 echo "=== 오류 로그 ==="
 cat "$OUT/errors.txt"
 

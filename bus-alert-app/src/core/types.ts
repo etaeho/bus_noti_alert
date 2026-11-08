@@ -168,3 +168,29 @@ export const DEFAULT_SETTINGS: AppSettings = {
   telegramChatId: '',
   startReminderEnabled: true,
 };
+
+/** 정류장 검색/지도 선택 결과 */
+export interface StopCandidate {
+  region: Region;
+  cityCode: string;
+  /** 정류장 표지판 번호 (ARS / mobileNo / nodeNo). 없을 수 있음 */
+  stopNo: string;
+  stopName: string;
+  /** 내부 정류소 ID (TAGO nodeId / GBIS stationId / 서울 stId) */
+  stationId: string;
+  latitude?: number;
+  longitude?: number;
+  distanceM?: number;
+}
+
+/** 정류장의 진행 방향 정보 */
+export interface StopDirection {
+  /** 예: "대전역 방면" */
+  label: string;
+  /** 다음 정류장 (지도에 화살표 표시용) */
+  nextStopName?: string;
+  nextLatitude?: number;
+  nextLongitude?: number;
+  /** 이 정류장을 지나는 노선 번호 */
+  routes: string[];
+}

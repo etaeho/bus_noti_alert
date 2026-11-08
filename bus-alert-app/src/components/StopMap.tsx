@@ -1,0 +1,143 @@
+/**
+ * 정류장 지도 (WebView + Leaflet, CARTO 지도 타일 - API 키 불필요)
+ *  - 정류장 마커 표시 / 탭하면 onSelect
+ *  - 선택한 정류장 → 다음 정류장 화살표로 진행 방향 표시
+ *  - 지도를 움직이면 onMoved(중심 좌표)
+ */
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ComponentType, type Ref } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { WebView, type WebViewMessageEvent, type WebViewProps } from 'react-native-webview';
+
+// react-native-webview 의 클래스 컴포넌트 타입이 React 19 타입과 맞지 않아 명시적으로 지정
+const MapWebView = WebView as unknown as ComponentType<WebViewProps & { ref?: Ref<WebView> }>;
+
+export interface MapStop {
+  id: string;
+  latitude: number;
+  longitude: number;
+  label: string;
+}
+
+export interface StopMapProps {
+  stops: MapStop[];
+  selectedId?: string | null;
+  me?: { latitude: number; longitude: number } | null;
+  /** 선택 정류장에서 다음 정류장 방향 화살표 */
+  arrowTo?: { latitude: number; longitude: number } | null;
+  onSelect?: (id: string) => void;
+  onMoved?: (center: { latitude: number; longitude: number }) => void;
+  height?: number;
+}
+
+export interface StopMapHandle {
+  /** 현재 지도 중심 */
+  getCenter(): { latitude: number; longitude: number } | null;
+  focus(latitude: number, longitude: number, zoom?: number): void;
+}
+
+const HTML = `<!doctype html><html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+ html,body,#map{margin:0;height:100%;background:#e8ecf2}
+ .lbl{background:#fff;border:1px solid #1E6FD9;border-radius:6px;padding:1px 5px;font:600 11px sans-serif;color:#121722;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+ .lbl.sel{background:#1E6FD9;color:#fff}
+ .leaflet-tooltip.lbl:before{display:none}
+ .arrow{font-size:22px;color:#D93B3B;line-height:22px;text-align:center;text-shadow:0 0 3px #fff}
+ .me{width:14px;height:14px;border-radius:7px;background:#1E6FD9;border:3px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4)}
+</style></head><body><div id="map"></div><script>
+var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify(o))};
+var map=L.map('map',{zoomControl:true,attributionControl:true}).setView([36.35,127.38],15);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',{maxZoom:19,subdomains:'abcd',attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(map);
+var layer=L.layerGroup().addTo(map), meLayer=L.layerGroup().addTo(map), arrowLayer=L.layerGroup().addTo(map);
+var lastKey='';
+map.on('moveend',function(){var c=map.getCenter();post({type:'moved',lat:c.lat,lng:c.lng})});
+function bearing(a,b){var t=Math.PI/180,y=Math.sin((b[1]-a[1])*t)*Math.cos(b[0]*t),x=Math.cos(a[0]*t)*Math.sin(b[0]*t)-Math.sin(a[0]*t)*Math.cos(b[0]*t)*Math.cos((b[1]-a[1])*t);return Math.atan2(y,x)/t}
+window.setData=function(d){
+  layer.clearLayers();arrowLayer.clearLayers();meLayer.clearLayers();
+  var pts=[];
+  (d.stops||[]).forEach(function(s){
+    var sel=s.id===d.selectedId;
+    var m=L.circleMarker([s.latitude,s.longitude],{radius:sel?10:7,color:'#fff',weight:2,fillColor:sel?'#D93B3B':'#1E6FD9',fillOpacity:1}).addTo(layer);
+    m.bindTooltip(s.label,{permanent:true,direction:'top',offset:[0,-8],className:'lbl'+(sel?' sel':'')});
+    m.on('click',function(){post({type:'select',id:s.id})});
+    pts.push([s.latitude,s.longitude]);
+  });
+  if(d.me){L.marker([d.me.latitude,d.me.longitude],{icon:L.divIcon({className:'',html:'<div class="me"></div>',iconSize:[20,20],iconAnchor:[10,10]}),interactive:false}).addTo(meLayer)}
+  var sel=(d.stops||[]).filter(function(s){return s.id===d.selectedId})[0];
+  if(sel&&d.arrowTo){
+    var a=[sel.latitude,sel.longitude],b=[d.arrowTo.latitude,d.arrowTo.longitude];
+    L.polyline([a,b],{color:'#D93B3B',weight:4,dashArray:'6 6'}).addTo(arrowLayer);
+    var deg=bearing(a,b);
+    L.marker(b,{icon:L.divIcon({className:'',html:'<div class="arrow" style="transform:rotate('+(deg-90)+'deg)">&#10148;</div>',iconSize:[22,22],iconAnchor:[11,11]}),interactive:false}).addTo(arrowLayer);
+    pts.push(b);
+  }
+  var key=JSON.stringify(pts)+'|'+d.selectedId;
+  if(d.fit&&key!==lastKey){
+    if(sel&&d.arrowTo){map.fitBounds(L.latLngBounds([[sel.latitude,sel.longitude],[d.arrowTo.latitude,d.arrowTo.longitude]]).pad(0.8),{maxZoom:17})}
+    else if(sel){map.setView([sel.latitude,sel.longitude],17)}
+    else if(pts.length>1){map.fitBounds(L.latLngBounds(pts).pad(0.15),{maxZoom:17})}
+    else if(pts.length===1){map.setView(pts[0],16)}
+    else if(d.me){map.setView([d.me.latitude,d.me.longitude],16)}
+  }
+  lastKey=key;
+};
+window.focusTo=function(lat,lng,z){map.setView([lat,lng],z||16)};
+post({type:'ready'});
+</script></body></html>`;
+
+export const StopMap = forwardRef<StopMapHandle, StopMapProps>(function StopMap(
+  { stops, selectedId, me, arrowTo, onSelect, onMoved, height = 300 },
+  ref,
+) {
+  const web = useRef<WebView>(null);
+  const [ready, setReady] = useState(false);
+  const center = useRef<{ latitude: number; longitude: number } | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    getCenter: () => center.current,
+    focus: (lat, lng, zoom) => web.current?.injectJavaScript(`window.focusTo(${lat},${lng},${zoom ?? 16});true;`),
+  }));
+
+  useEffect(() => {
+    if (!ready) return;
+    const payload = JSON.stringify({ stops, selectedId: selectedId ?? null, me: me ?? null, arrowTo: arrowTo ?? null, fit: true });
+    web.current?.injectJavaScript(`window.setData(${payload});true;`);
+  }, [ready, stops, selectedId, me, arrowTo]);
+
+  const onMessage = (e: WebViewMessageEvent) => {
+    try {
+      const msg = JSON.parse(e.nativeEvent.data);
+      if (msg.type === 'ready') setReady(true);
+      else if (msg.type === 'select') onSelect?.(String(msg.id));
+      else if (msg.type === 'moved') {
+        center.current = { latitude: msg.lat, longitude: msg.lng };
+        onMoved?.(center.current);
+      }
+    } catch {
+      // 무시
+    }
+  };
+
+  return (
+    <View style={[styles.wrap, { height }]}>
+      <MapWebView
+        ref={web}
+        originWhitelist={['*']}
+        source={{ html: HTML, baseUrl: 'https://localhost/' }}
+        onMessage={onMessage}
+        javaScriptEnabled
+        domStorageEnabled
+        setSupportMultipleWindows={false}
+        nestedScrollEnabled
+        style={styles.web}
+      />
+    </View>
+  );
+});
+
+const styles = StyleSheet.create({
+  wrap: { borderRadius: 14, overflow: 'hidden', backgroundColor: '#e8ecf2' },
+  web: { flex: 1, backgroundColor: 'transparent' },
+});

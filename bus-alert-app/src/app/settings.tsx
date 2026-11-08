@@ -93,8 +93,8 @@ export default function SettingsScreen() {
             secureTextEntry
           />
           <Muted style={{ marginTop: 8 }}>
-            필요 API 활용신청: 국토교통부 TAGO 버스도착정보·버스정류소정보 / 경기도 버스도착정보·정류소조회(v2) / 서울시
-            정류소정보조회
+            필요 API 활용신청: 국토교통부 TAGO 버스도착정보·버스정류소정보·버스노선정보(방면 표시) / 경기도
+            버스도착정보·정류소조회(v2) / 서울시 정류소정보조회
           </Muted>
         </Card>
 

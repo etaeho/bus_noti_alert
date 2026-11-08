@@ -1,12 +1,23 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { Button, Card, Chip, Field, Label, Muted, SectionTitle, Stepper, TimeStepper, ToggleRow, useTheme } from '../../components/ui';
 import { fetchArrivals, lookupStop } from '../../core/busApi';
 import { formatArrSec } from '../../core/format';
 import { REGION_LABELS, TAGO_CITY_CODES, WEEKDAY_LABELS, type BusAlarm, type Region, type UnifiedArrival, type Weekday } from '../../core/types';
 import { runOnceNow } from '../../services/monitor';
+import { displayStopName, takePickedStop } from '../../services/pickerStore';
 import { applyMonitoringChanges } from '../../services/runtime';
 import { deleteAlarm, getAlarms, getApiKey, upsertAlarm } from '../../services/storage';
 
@@ -44,6 +55,30 @@ export default function AlarmEditScreen() {
   const [stopMsg, setStopMsg] = useState('');
   const [arrivals, setArrivals] = useState<UnifiedArrival[] | null>(null);
   const [availableRoutes, setAvailableRoutes] = useState<string[]>([]);
+  const [manual, setManual] = useState(false);
+
+  // 정류장 선택 화면에서 돌아오면 결과 반영
+  useFocusEffect(
+    useCallback(() => {
+      const picked = takePickedStop('alarm');
+      if (!picked) return;
+      const { stop, direction } = picked;
+      setA((prev) =>
+        prev
+          ? {
+              ...prev,
+              region: stop.region,
+              cityCode: stop.cityCode,
+              stopNo: stop.stopNo,
+              stationId: stop.stationId,
+              stopName: displayStopName(picked),
+            }
+          : prev,
+      );
+      setAvailableRoutes(direction?.routes ?? []);
+      setStopMsg(direction?.routes.length ? '이 정류장을 지나는 노선을 아래에서 눌러 선택하세요.' : '');
+    }, []),
+  );
 
   useEffect(() => {
     if (isNew) return;
@@ -103,8 +138,8 @@ export default function AlarmEditScreen() {
 
   const build = (): BusAlarm | null => {
     const stopNo = a.stopNo.replace(/-/g, '').trim();
-    if (!stopNo) {
-      Alert.alert('입력 확인', '정류소 번호를 입력해 주세요.');
+    if (!stopNo && !a.stationId) {
+      Alert.alert('입력 확인', '정류장을 선택해 주세요.');
       return null;
     }
     return { ...a, stopNo, routes: currentRoutes, label: a.label.trim() };
@@ -157,52 +192,79 @@ export default function AlarmEditScreen() {
           <Field value={a.label} onChangeText={(v) => set({ label: v })} placeholder="예: 출근 311번" />
 
           <View style={{ height: 14 }} />
-          <Label>권역</Label>
-          <View style={styles.wrap}>
-            {REGIONS.map((r) => (
-              <Chip
-                key={r}
-                label={REGION_LABELS[r]}
-                selected={a.region === r}
-                onPress={() => set({ region: r, stationId: '', cityCode: '' })}
-              />
-            ))}
-          </View>
-
-          <Label hint="정류장 표지판의 5자리 번호 (서울 ARS 번호 / 경기 정류소 번호)">정류소 번호</Label>
-          <View style={styles.row}>
-            <Field
-              style={{ flex: 1 }}
-              value={a.stopNo}
-              onChangeText={(v) => set({ stopNo: v, stationId: '' })}
-              placeholder="예: 11690"
-              keyboardType="number-pad"
-            />
-            <Button
-              title={busy === 'stop' ? '확인 중…' : '정류장 확인'}
-              variant="secondary"
-              onPress={checkStop}
-              disabled={!!busy}
-              style={{ marginLeft: 8 }}
-            />
-          </View>
+          <Label>정류장</Label>
+          {a.stopName || a.stopNo ? (
+            <View style={[styles.stopBox, { borderColor: t.border, backgroundColor: t.inputBg }]}>
+              <Text style={{ color: t.text, fontSize: 16, fontWeight: '700' }}>🚏 {a.stopName || `정류소 ${a.stopNo}`}</Text>
+              <Muted>
+                {[REGION_LABELS[a.region], a.stopNo ? `번호 ${a.stopNo}` : ''].filter(Boolean).join(' · ')}
+              </Muted>
+            </View>
+          ) : null}
+          <Button
+            title={a.stopName || a.stopNo ? '🔍 정류장 다시 찾기' : '🔍 정류장 이름 검색 / 지도에서 선택'}
+            variant={a.stopName || a.stopNo ? 'secondary' : 'primary'}
+            onPress={() =>
+              router.push({
+                pathname: '/stop-picker',
+                params: { purpose: 'alarm', ...(a.stopNo || a.stationId ? { region: a.region } : {}) },
+              })
+            }
+            style={{ marginTop: 8 }}
+          />
           {stopMsg ? <Muted style={{ marginTop: 6 }}>{stopMsg}</Muted> : null}
 
-          <View style={{ height: 14 }} />
-          <Label>정류장 이름 (표시용)</Label>
-          <Field value={a.stopName} onChangeText={(v) => set({ stopName: v })} placeholder="자동 입력 또는 직접 입력" />
-
-          {isTago && (
-            <>
+          <Pressable onPress={() => setManual(!manual)} style={{ marginTop: 12 }}>
+            <Text style={{ color: t.primary, fontWeight: '600' }}>
+              {manual ? '▾' : '▸'} 정류소 번호로 직접 입력 (고급)
+            </Text>
+          </Pressable>
+          {manual && (
+            <View style={{ marginTop: 10 }}>
+              <Label>권역</Label>
+              <View style={styles.wrap}>
+                {REGIONS.map((r) => (
+                  <Chip
+                    key={r}
+                    label={REGION_LABELS[r]}
+                    selected={a.region === r}
+                    onPress={() => set({ region: r, stationId: '', cityCode: '' })}
+                  />
+                ))}
+              </View>
+              <Label hint="정류장 표지판의 번호 (서울 ARS 번호 / 경기 정류소 번호)">정류소 번호</Label>
+              <View style={styles.row}>
+                <Field
+                  style={{ flex: 1 }}
+                  value={a.stopNo}
+                  onChangeText={(v) => set({ stopNo: v, stationId: '' })}
+                  placeholder="예: 11690"
+                  keyboardType="number-pad"
+                />
+                <Button
+                  title={busy === 'stop' ? '확인 중…' : '정류장 확인'}
+                  variant="secondary"
+                  onPress={checkStop}
+                  disabled={!!busy}
+                  style={{ marginLeft: 8 }}
+                />
+              </View>
               <View style={{ height: 14 }} />
-              <Label hint={`비워두면 기본값 ${TAGO_CITY_CODES[a.region]} 사용`}>TAGO 도시코드 (고급)</Label>
-              <Field
-                value={a.cityCode}
-                onChangeText={(v) => set({ cityCode: v.trim() })}
-                placeholder={TAGO_CITY_CODES[a.region]}
-                keyboardType="number-pad"
-              />
-            </>
+              <Label>정류장 이름 (표시용)</Label>
+              <Field value={a.stopName} onChangeText={(v) => set({ stopName: v })} placeholder="자동 입력 또는 직접 입력" />
+              {isTago && (
+                <>
+                  <View style={{ height: 14 }} />
+                  <Label hint={`비워두면 기본값 ${TAGO_CITY_CODES[a.region]} 사용`}>TAGO 도시코드</Label>
+                  <Field
+                    value={a.cityCode}
+                    onChangeText={(v) => set({ cityCode: v.trim() })}
+                    placeholder={TAGO_CITY_CODES[a.region]}
+                    keyboardType="number-pad"
+                  />
+                </>
+              )}
+            </View>
           )}
 
           <View style={{ height: 14 }} />
@@ -210,7 +272,7 @@ export default function AlarmEditScreen() {
           <Field value={routesText} onChangeText={setRoutesText} placeholder="예: 311, 102" autoCapitalize="characters" />
           {availableRoutes.length > 0 && (
             <>
-              <Muted style={{ marginTop: 8, marginBottom: 6 }}>현재 이 정류장에 도착 예정인 노선 (눌러서 선택)</Muted>
+              <Muted style={{ marginTop: 8, marginBottom: 6 }}>이 정류장의 노선 (눌러서 선택)</Muted>
               <View style={styles.wrap}>
                 {availableRoutes.map((r) => (
                   <Chip key={r} label={r} selected={currentRoutes.includes(r)} onPress={() => toggleRoute(r)} />
@@ -340,4 +402,5 @@ const styles = StyleSheet.create({
   half: { flex: 1 },
   timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
   settingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  stopBox: { borderWidth: 1, borderRadius: 10, padding: 12 },
 });

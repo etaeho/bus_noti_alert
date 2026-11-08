@@ -21,6 +21,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" options={{ title: '버스 알리미' }} />
         <Stack.Screen name="alarm/[id]" options={{ title: '버스 알림 설정' }} />
         <Stack.Screen name="ride" options={{ title: '하차 알림' }} />
+        <Stack.Screen name="stop-picker" options={{ title: '정류장 선택' }} />
         <Stack.Screen name="settings" options={{ title: '설정' }} />
       </Stack>
     </>

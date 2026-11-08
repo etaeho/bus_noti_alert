@@ -6,7 +6,14 @@
  */
 import { XMLParser } from 'fast-xml-parser';
 
-import { TAGO_CITY_CODES, type Region, type StopInfo, type UnifiedArrival } from './types';
+import {
+  TAGO_CITY_CODES,
+  type Region,
+  type StopCandidate,
+  type StopDirection,
+  type StopInfo,
+  type UnifiedArrival,
+} from './types';
 
 const TAGO_STOP_SEARCH_URL = 'http://apis.data.go.kr/1613000/BusSttnInfoInqireService/getSttnNoList';
 const TAGO_ARRIVAL_ALL_URL = 'http://apis.data.go.kr/1613000/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList';
@@ -416,4 +423,274 @@ export async function lookupStop(
   const info = await lookupTagoStop(key, city, stopNo);
   if (!info) throw new BusApiError(`도시코드 ${city}에서 정류소 번호 ${stopNo}를 찾지 못했습니다.`);
   return info;
+}
+
+// ───────────────────────────── 정류장 검색 · 주변 정류장 · 방면 ─────────────────────────────
+
+const TAGO_NEARBY_URL = 'http://apis.data.go.kr/1613000/BusSttnInfoInqireService/getCrdntPrxmtSttnList';
+const TAGO_STOP_ROUTES_URL = 'http://apis.data.go.kr/1613000/BusSttnInfoInqireService/getSttnThrghRouteList';
+const TAGO_ROUTE_STOPS_URL = 'http://apis.data.go.kr/1613000/BusRouteInfoInqireService/getRouteAcctoThrghSttnList';
+const GBIS_STATION_AROUND_URL = 'https://apis.data.go.kr/6410000/busstationservice/v2/getBusStationAroundListv2';
+const SEOUL_STATION_BY_NAME_URL = 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByName';
+const SEOUL_STATION_BY_POS_URL = 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByPos';
+
+/** TAGO 도시코드 → 앱 권역 */
+const CITY_CODE_TO_REGION: Record<string, Region> = {
+  '25': 'daejeon',
+  '12': 'sejong',
+  '22': 'daegu',
+  '23': 'incheon',
+  '24': 'gwangju',
+  '26': 'ulsan',
+  '31020': 'seongnam',
+};
+
+function requireKey(serviceKey: string): string {
+  const key = normalizeServiceKey(serviceKey);
+  if (!key) throw new BusApiError('공공데이터포털 API 키가 설정되지 않았습니다. 설정 화면에서 입력해 주세요.');
+  return key;
+}
+
+async function seoulItems(url: string): Promise<Item[]> {
+  const text = (await httpGet(url)).trim();
+  if (text.startsWith('{')) {
+    const data = JSON.parse(text);
+    const code = str(data?.msgHeader?.headerCd);
+    if (code && code !== '0' && code !== '4') throw new BusApiError(`서울 버스 API 오류: ${str(data?.msgHeader?.headerMsg, code)}`);
+    return asArray(data?.msgBody?.itemList as Item | Item[]);
+  }
+  const root = xml.parse(text);
+  const headerCd = str(findDeep(root, 'headerCd'));
+  if (headerCd && headerCd !== '0' && headerCd !== '4') {
+    throw new BusApiError(`서울 버스 API 오류: ${str(findDeep(root, 'headerMsg'), headerCd)}`);
+  }
+  const errMsg = str(findDeep(root, 'returnAuthMsg'));
+  if (errMsg && errMsg !== 'NORMAL_CODE') throw new BusApiError(`API 인증 오류: ${errMsg}`);
+  const body = findDeep(root, 'msgBody') as Record<string, unknown> | undefined;
+  return asArray(body?.itemList as Item | Item[]);
+}
+
+async function gbisList(url: string, listKey: string): Promise<Item[]> {
+  const text = await httpGet(url);
+  if (!text.trim().startsWith('{')) parseTagoResponse(text); // XML 오류 메시지 해석
+  return extractGbisList(JSON.parse(text), listKey);
+}
+
+function tagoStop(it: Item, region: Region, cityCode: string): StopCandidate {
+  return {
+    region,
+    cityCode,
+    stopNo: str(it.nodeno),
+    stopName: str(it.nodenm),
+    stationId: str(it.nodeid),
+    latitude: num(it.gpslati),
+    longitude: num(it.gpslong),
+  };
+}
+
+function gbisStop(it: Item, region: Region): StopCandidate {
+  return {
+    region,
+    cityCode: '',
+    stopNo: str(it.mobileNo),
+    stopName: str(it.stationName),
+    stationId: str(it.stationId),
+    latitude: num(it.y),
+    longitude: num(it.x),
+    distanceM: num(it.distance),
+  };
+}
+
+/** 정류장 이름으로 검색 (예: "명석고") */
+export async function searchStopsByName(
+  serviceKey: string,
+  region: Region,
+  name: string,
+  cityCode = '',
+): Promise<StopCandidate[]> {
+  const key = requireKey(serviceKey);
+  const q = name.trim();
+  if (!q) return [];
+  // 숫자만 입력하면 정류소 번호 검색
+  if (/^\d{4,6}$/.test(q.replace(/-/g, ''))) {
+    try {
+      const info = await lookupStop(key, region, q, cityCode);
+      return [{ region, cityCode: cityCode || TAGO_CITY_CODES[region] || '', ...info }];
+    } catch {
+      // 이름 검색으로 계속
+    }
+  }
+
+  if (region === 'seoul') {
+    const items = await seoulItems(buildUrl(SEOUL_STATION_BY_NAME_URL, { serviceKey: key, stSrch: q, resultType: 'json' }));
+    return items.slice(0, 40).map((it) => ({
+      region,
+      cityCode: '',
+      stopNo: str(it.arsId),
+      stopName: str(it.stNm),
+      stationId: str(it.stId),
+      latitude: num(it.tmY),
+      longitude: num(it.tmX),
+    }));
+  }
+
+  if (isGbisRegion(region)) {
+    const items = await gbisList(
+      buildUrl(GBIS_STATION_LIST_URL, { serviceKey: key, keyword: q, format: 'json' }),
+      'busStationList',
+    );
+    return items.slice(0, 40).map((it) => gbisStop(it, region));
+  }
+
+  const city = cityCode || TAGO_CITY_CODES[region] || '25';
+  const items = parseTagoResponse(
+    await httpGet(
+      buildUrl(TAGO_STOP_SEARCH_URL, { serviceKey: key, cityCode: city, nodeNm: q, numOfRows: 40, pageNo: 1, _type: 'json' }),
+    ),
+  );
+  return items.map((it) => tagoStop(it, region, city));
+}
+
+/** 좌표 주변 정류장 (지도에서 선택) */
+export async function nearbyStops(
+  serviceKey: string,
+  region: Region,
+  latitude: number,
+  longitude: number,
+): Promise<StopCandidate[]> {
+  const key = requireKey(serviceKey);
+
+  if (region === 'seoul') {
+    const items = await seoulItems(
+      buildUrl(SEOUL_STATION_BY_POS_URL, { serviceKey: key, tmX: longitude, tmY: latitude, radius: 500, resultType: 'json' }),
+    );
+    return items.slice(0, 40).map((it) => ({
+      region,
+      cityCode: '',
+      stopNo: str(it.arsId),
+      stopName: str(it.stationNm),
+      stationId: str(it.stationId),
+      latitude: num(it.gpsY),
+      longitude: num(it.gpsX),
+      distanceM: num(it.dist),
+    }));
+  }
+
+  if (isGbisRegion(region)) {
+    const items = await gbisList(
+      buildUrl(GBIS_STATION_AROUND_URL, { serviceKey: key, x: longitude, y: latitude, format: 'json' }),
+      'busStationAroundList',
+    );
+    return items.slice(0, 40).map((it) => gbisStop(it, region));
+  }
+
+  // TAGO: 도시코드 없이 좌표만으로 조회되며, 결과에 도시코드가 포함된다
+  const items = parseTagoResponse(
+    await httpGet(
+      buildUrl(TAGO_NEARBY_URL, { serviceKey: key, gpsLati: latitude, gpsLong: longitude, numOfRows: 40, pageNo: 1, _type: 'json' }),
+    ),
+  );
+  return items.map((it) => {
+    const city = str(it.citycode, TAGO_CITY_CODES[region] || '');
+    return tagoStop(it, CITY_CODE_TO_REGION[city] ?? region, city);
+  });
+}
+
+/**
+ * 정류장의 진행 방향("○○ 방면")과 지나는 노선.
+ *  - TAGO: 경유 노선 → 노선의 정류장 순서에서 다음 정류장
+ *  - 서울: 도착정보의 다음 정류장(nxtStn)
+ *  - 경기: 도착정보의 노선 종점 방향(routeDestName)
+ */
+export async function stopDirection(serviceKey: string, stop: StopCandidate): Promise<StopDirection> {
+  const key = requireKey(serviceKey);
+
+  if (stop.region === 'seoul') {
+    const items = await fetchSeoulItems(key, stop.stopNo);
+    const routes = [...new Set(items.map((it) => str(it.rtNm) || str(it.busRouteAbrv)).filter(Boolean))];
+    const nexts = items.map((it) => str(it.nxtStn)).filter(Boolean);
+    const next = mostCommon(nexts);
+    const dir = mostCommon(items.map((it) => str(it.adirection)).filter(Boolean));
+    return {
+      label: next ? `${next} 방면` : dir ? `${dir} 방향` : '',
+      nextStopName: next,
+      routes,
+    };
+  }
+
+  if (isGbisRegion(stop.region)) {
+    const items = await gbisList(
+      buildUrl(GBIS_ARRIVAL_LIST_URL, { serviceKey: key, stationId: stop.stationId, format: 'json' }),
+      'busArrivalList',
+    );
+    const routes = [...new Set(items.map((it) => str(it.routeName)).filter(Boolean))];
+    const dests = [...new Set(items.map((it) => str(it.routeDestName)).filter(Boolean))];
+    return {
+      label: dests.length ? `${dests.slice(0, 2).join('·')}${dests.length > 2 ? ' 등' : ''} 방면` : '',
+      routes,
+    };
+  }
+
+  const city = stop.cityCode || TAGO_CITY_CODES[stop.region] || '25';
+  const routeItems = parseTagoResponse(
+    await httpGet(
+      buildUrl(TAGO_STOP_ROUTES_URL, { serviceKey: key, cityCode: city, nodeid: stop.stationId, numOfRows: 60, pageNo: 1, _type: 'json' }),
+    ),
+  );
+  const routes = [...new Set(routeItems.map((it) => str(it.routeno)).filter(Boolean))].sort(routeSort);
+  // 앞쪽 노선 몇 개로 다음 정류장을 찾는다 (회차 지점 등 예외 대비)
+  for (const r of routeItems.slice(0, 3)) {
+    try {
+      const stops = parseTagoResponse(
+        await httpGet(
+          buildUrl(TAGO_ROUTE_STOPS_URL, { serviceKey: key, cityCode: city, routeId: str(r.routeid), numOfRows: 500, pageNo: 1, _type: 'json' }),
+        ),
+      ).sort((a, b) => Number(a.nodeord) - Number(b.nodeord));
+      const idx = stops.findIndex((s) => str(s.nodeid) === stop.stationId);
+      const next = idx >= 0 ? stops[idx + 1] : undefined;
+      if (next) {
+        return {
+          label: `${str(next.nodenm)} 방면`,
+          nextStopName: str(next.nodenm),
+          nextLatitude: num(next.gpslati),
+          nextLongitude: num(next.gpslong),
+          routes,
+        };
+      }
+    } catch {
+      // 노선정보 API 미신청 등 → 다음 노선 시도
+    }
+  }
+  return { label: '', routes };
+}
+
+function mostCommon(values: string[]): string | undefined {
+  const counts = new Map<string, number>();
+  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
+  let best: string | undefined;
+  let bestN = 0;
+  for (const [v, n] of counts) if (n > bestN) [best, bestN] = [v, n];
+  return best;
+}
+
+function routeSort(a: string, b: string): number {
+  const na = parseInt(a, 10);
+  const nb = parseInt(b, 10);
+  if (!Number.isNaN(na) && !Number.isNaN(nb) && na !== nb) return na - nb;
+  return a.localeCompare(b, 'ko');
+}
+
+/** 기기 위치의 행정구역 이름 → 앱 권역 */
+export function regionFromAddress(parts: (string | null | undefined)[]): Region | null {
+  const s = parts.filter(Boolean).join(' ');
+  if (/서울/.test(s)) return 'seoul';
+  if (/성남/.test(s)) return 'seongnam';
+  if (/경기/.test(s)) return 'gyeonggi';
+  if (/대전/.test(s)) return 'daejeon';
+  if (/세종/.test(s)) return 'sejong';
+  if (/대구/.test(s)) return 'daegu';
+  if (/인천/.test(s)) return 'incheon';
+  if (/광주/.test(s)) return 'gwangju';
+  if (/울산/.test(s)) return 'ulsan';
+  return null;
 }
