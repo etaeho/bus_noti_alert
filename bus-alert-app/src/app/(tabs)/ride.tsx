@@ -6,16 +6,16 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { LiveArrivals } from '../components/LiveArrivals';
-import { Button, Card, Chip, Field, Label, Muted, SectionTitle, ToggleRow, useTheme } from '../components/ui';
-import { formatArrSec } from '../core/format';
-import { REGION_LABELS, type RideAlert, type RideRuntimeState } from '../core/types';
-import { requestLocationPermissions } from '../services/background';
-import { ensureNotificationPermission } from '../services/notify';
-import { displayStopName, takePickedStop } from '../services/pickerStore';
-import { runMonitorTick } from '../services/monitor';
-import { applyMonitoringChanges } from '../services/runtime';
-import { getAlarms, getRide, getRideState, saveRide, saveRideState } from '../services/storage';
+import { LiveArrivals } from '../../components/LiveArrivals';
+import { Button, Card, Chip, Field, Label, Muted, SectionTitle, ToggleRow, useTheme } from '../../components/ui';
+import { formatArrSec } from '../../core/format';
+import { REGION_LABELS, type RideAlert, type RideRuntimeState } from '../../core/types';
+import { requestLocationPermissions } from '../../services/background';
+import { ensureNotificationPermission } from '../../services/notify';
+import { displayStopName, takePickedStop } from '../../services/pickerStore';
+import { runMonitorTick } from '../../services/monitor';
+import { applyMonitoringChanges } from '../../services/runtime';
+import { getAlarms, getRide, getRideState, saveRide, saveRideState } from '../../services/storage';
 
 const STAGES = [5, 4, 3, 2, 1];
 
@@ -170,8 +170,8 @@ export default function RideScreen() {
         <Muted style={{ marginBottom: 8 }}>
           내가 탄 버스가 아닌 앞 버스가 잡혔다면(남은 정거장 수가 너무 적으면) 아래 버튼으로 다음 버스로 바꾸세요.
         </Muted>
-        <Button title="다음 버스로 바꾸기" variant="secondary" onPress={nextBus} />
-        <Button title="하차 알림 종료" variant="danger" onPress={stop} style={{ marginTop: 10 }} />
+        <Button title="다음 버스로 바꾸기" icon="swap-horizontal" variant="secondary" onPress={nextBus} />
+        <Button title="하차 알림 종료" icon="stop-circle" variant="danger" onPress={stop} style={{ marginTop: 10 }} />
       </ScrollView>
     );
   }
@@ -183,7 +183,7 @@ export default function RideScreen() {
           버스에 탄 뒤 내릴 정류장과 노선을 고르고 시작을 누르세요. 내 버스가 내릴 정류장 몇 정거장 전에 왔는지 알려 드립니다.
         </Muted>
 
-        <SectionTitle>내릴 정류장</SectionTitle>
+        <SectionTitle>① 내릴 정류장 · 타고 있는 노선</SectionTitle>
         <Card>
           {r.stopName || r.stopNo ? (
             <View style={[styles.stopBox, { borderColor: t.border, backgroundColor: t.inputBg }]}>
@@ -219,7 +219,7 @@ export default function RideScreen() {
           )}
         </Card>
 
-        <SectionTitle>알림 방식</SectionTitle>
+        <SectionTitle>② 알림 방식</SectionTitle>
         <Card>
           <Label hint="여러 개 선택 가능">내릴 정류장 몇 정거장 전에 알릴까요?</Label>
           <View style={styles.wrap}>
@@ -234,7 +234,7 @@ export default function RideScreen() {
           />
         </Card>
 
-        <Button title="하차 알림 시작" onPress={start} disabled={!(r.stopNo || r.stationId) || !r.routeNo.trim()} />
+        <Button title="하차 알림 시작" icon="play" onPress={start} disabled={!(r.stopNo || r.stationId) || !r.routeNo.trim()} />
       </ScrollView>
     </KeyboardAvoidingView>
   );

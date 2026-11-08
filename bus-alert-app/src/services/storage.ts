@@ -169,3 +169,34 @@ export async function getLogs(): Promise<LogEntry[]> {
 export async function clearLogs(): Promise<void> {
   await AsyncStorage.removeItem(K.log);
 }
+
+// ── 알림 기록 (최근 알림 화면) ──
+export type HistoryKind = 'arrival' | 'stage' | 'ride' | 'start' | 'test';
+export interface HistoryEntry {
+  id: string;
+  at: number;
+  kind: HistoryKind;
+  title: string;
+  body: string;
+}
+const HISTORY_KEY = 'busalert:history:v1';
+const HISTORY_SEEN_KEY = 'busalert:historySeen:v1';
+
+export async function appendHistory(e: Omit<HistoryEntry, 'id' | 'at'>): Promise<void> {
+  const list = await readJson<HistoryEntry[]>(HISTORY_KEY, []);
+  const at = Date.now();
+  list.unshift({ ...e, at, id: `${at.toString(36)}${Math.random().toString(36).slice(2, 6)}` });
+  await writeJson(HISTORY_KEY, list.slice(0, 300));
+}
+export async function getHistory(): Promise<HistoryEntry[]> {
+  return readJson<HistoryEntry[]>(HISTORY_KEY, []);
+}
+export async function clearHistory(): Promise<void> {
+  await AsyncStorage.removeItem(HISTORY_KEY);
+}
+export async function getHistorySeenAt(): Promise<number> {
+  return Number((await AsyncStorage.getItem(HISTORY_SEEN_KEY)) ?? 0);
+}
+export async function markHistorySeen(): Promise<void> {
+  await AsyncStorage.setItem(HISTORY_SEEN_KEY, String(Date.now()));
+}

@@ -197,7 +197,7 @@ export default function AlarmEditScreen() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Stack.Screen options={{ title: isNew ? '새 버스 알림' : '버스 알림 수정' }} />
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <SectionTitle>정류장 · 노선</SectionTitle>
+        <SectionTitle>① 정류장 · 노선</SectionTitle>
         <Card>
           <Label>알림 이름</Label>
           <Field value={a.label} onChangeText={(v) => set({ label: v })} placeholder="예: 출근 311번" />
@@ -302,7 +302,7 @@ export default function AlarmEditScreen() {
           )}
         </Card>
 
-        <SectionTitle>알림 시간</SectionTitle>
+        <SectionTitle>② 알림 받을 시간</SectionTitle>
         <Card>
           <View style={styles.timeRow}>
             <View style={{ alignItems: 'center' }}>
@@ -331,7 +331,7 @@ export default function AlarmEditScreen() {
           </View>
         </Card>
 
-        <SectionTitle>알림 방식</SectionTitle>
+        <SectionTitle>③ 알림 방식</SectionTitle>
         <Card>
           <Label hint="여러 개 선택 가능 · 각 단계마다 한 번씩 알림">몇 정거장 전에 알릴까요?</Label>
           <View style={styles.wrap}>
@@ -384,7 +384,6 @@ export default function AlarmEditScreen() {
           <ToggleRow label="알림 사용" value={a.enabled} onChange={(v) => set({ enabled: v })} />
         </Card>
 
-        <Button title="저장" onPress={save} />
         <View style={styles.row}>
           <Button
             title={busy === 'check' ? '조회 중…' : '지금 조회'}
@@ -422,12 +421,16 @@ export default function AlarmEditScreen() {
 
         {!isNew && <Button title="알림 삭제" variant="danger" onPress={remove} style={{ marginTop: 24 }} />}
       </ScrollView>
+      <View style={[styles.saveBar, { backgroundColor: t.card, borderColor: t.border }]}>
+        <Button title={isNew ? '알림 만들기' : '변경 사항 저장'} icon="checkmark" onPress={save} />
+      </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 60 },
+  container: { padding: 16, paddingBottom: 40 },
+  saveBar: { padding: 12, paddingBottom: 20, borderTopWidth: StyleSheet.hairlineWidth },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 6 },
   row: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
   half: { flex: 1 },

@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import { describeAlertRule, toPlainText } from '../core/format';
 import type { BusAlarm } from '../core/types';
 import type { OutgoingNotification } from '../core/decide';
-import { appendLog, getSettings, getTelegramToken } from './storage';
+import { appendHistory, appendLog, getSettings, getTelegramToken, type HistoryKind } from './storage';
 
 export const CHANNEL_BUS = 'bus-arrival';
 export const CHANNEL_RIDE = 'ride-alight';
@@ -76,7 +76,16 @@ export async function deliver(n: OutgoingNotification, channelId = CHANNEL_BUS):
     },
     trigger: Platform.OS === 'android' ? { channelId } : null,
   });
+  await appendHistory({ kind: historyKind(n), title: n.title, body: n.body }).catch(() => {});
   await sendTelegram(toPlainText(n));
+}
+
+function historyKind(n: OutgoingNotification): HistoryKind {
+  if (n.key === 'ride' || n.key.startsWith('ride:')) return 'ride';
+  if (n.key === 'test' || n.key.includes(':test')) return 'test';
+  if (n.key.endsWith(':start')) return 'start';
+  if (/정거장 전|곧 도착/.test(n.title)) return 'stage';
+  return 'arrival';
 }
 
 /**

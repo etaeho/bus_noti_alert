@@ -14,15 +14,14 @@ export default function RootLayout() {
         screenOptions={{
           headerStyle: { backgroundColor: t.card },
           headerTintColor: t.text,
-          headerTitleStyle: { fontWeight: '700' },
+          headerTitleStyle: { fontWeight: '800' },
+          headerShadowVisible: false,
           contentStyle: { backgroundColor: t.bg },
         }}
       >
-        <Stack.Screen name="index" options={{ title: '버스 알리미' }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="alarm/[id]" options={{ title: '버스 알림 설정' }} />
-        <Stack.Screen name="ride" options={{ title: '하차 알림' }} />
         <Stack.Screen name="stop-picker" options={{ title: '정류장 선택' }} />
-        <Stack.Screen name="settings" options={{ title: '설정' }} />
       </Stack>
     </>
   );
