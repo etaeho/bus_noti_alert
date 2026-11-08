@@ -5,6 +5,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { HeroHeader } from '../../components/HeroHeader';
 import { Button, Card, Field, Icon, Label, ListRow, Muted, Pill, SectionTitle, ToggleRow, useTheme } from '../../components/ui';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../core/types';
 import { requestLocationPermissions } from '../../services/background';
@@ -113,6 +114,8 @@ export default function SettingsScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <HeroHeader title="설정" subtitle="API 키 · 권한 · 백그라운드" />
+        <View style={{ padding: 16 }}>
         <SectionTitle>공공데이터 API 키</SectionTitle>
         <Card>
           {!editingKey && savedKey ? (
@@ -260,12 +263,13 @@ export default function SettingsScreen() {
             </View>
           ) : null}
         </Card>
+      </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 60 },
+  container: { paddingBottom: 60 },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 });

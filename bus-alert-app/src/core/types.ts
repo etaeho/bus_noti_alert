@@ -118,6 +118,8 @@ export interface UnifiedArrival {
   vehicleType: string;
   vehicleIdOrPlate: string;
   extraInfo: string;
+  /** 노선 종류 (간선·지선·광역·마을·좌석·급행·순환·공항 등) */
+  routeType?: string;
 }
 
 /** 정류장 조회 결과 */

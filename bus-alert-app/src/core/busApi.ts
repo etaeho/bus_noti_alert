@@ -198,6 +198,7 @@ async function fetchTagoArrivals(key: string, q: ArrivalQuery, cityOverride?: st
       vehicleType: str(it.vehicletp, '일반버스'),
       vehicleIdOrPlate: str(it.vehicleno),
       extraInfo: `노선유형: ${str(it.routetp, '시내버스')}`,
+      routeType: str(it.routetp).replace(/버스$/, ''),
     });
   }
   return out.sort((a, b) => a.arrSec - b.arrSec);
@@ -237,6 +238,15 @@ async function lookupGbisStop(key: string, stopNo: string): Promise<StopInfo | n
   return null;
 }
 
+const GBIS_ROUTE_TYPES: Record<string, string> = {
+  '11': '직행좌석', '12': '좌석', '13': '일반', '14': '광역급행', '15': '따복', '16': '순환',
+  '21': '농어촌', '22': '농어촌', '23': '농어촌', '30': '마을', '41': '고속', '42': '시외', '43': '시외',
+  '51': '공항', '52': '공항', '53': '공항',
+};
+const SEOUL_ROUTE_TYPES: Record<string, string> = {
+  '1': '공항', '2': '마을', '3': '간선', '4': '지선', '5': '순환', '6': '광역', '7': '인천', '8': '경기', '0': '공용',
+};
+
 const LOW_PLATE: Record<string, string> = { '0': '일반버스', '1': '저상버스', '2': '2층버스', '7': '트롤리버스' };
 
 async function fetchGbisArrivals(key: string, q: ArrivalQuery): Promise<UnifiedArrival[]> {
@@ -260,26 +270,31 @@ async function fetchGbisArrivals(key: string, q: ArrivalQuery): Promise<UnifiedA
     for (const it of items) {
       const routeNm = str(it.routeName);
       if (want.size && !want.has(routeNm.toUpperCase())) continue;
-      const pred = str(it.predictTime1);
-      if (!pred) continue;
-      const plate = str(it.plateNo1);
+      const routeType = GBIS_ROUTE_TYPES[str(it.routeTypeCd)] ?? '';
       const dest = str(it.routeDestName);
-      const seat = Number(it.remainSeatCnt1);
-      const extra: string[] = [];
-      if (dest) extra.push(`종점방향: ${dest}`);
-      if (Number.isFinite(seat) && seat >= 0 && str(it.remainSeatCnt1) !== '') extra.push(`잔여좌석: ${seat}석`);
-      if (plate) extra.push(`차량번호: ${plate}`);
-      out.push({
-        regionLabel: '성남/경기',
-        stopName: stopName || `정류소(${q.stopNo})`,
-        stopNo: q.stopNo,
-        routeNo: routeNm,
-        arrSec: Number(pred) * 60,
-        prevStationCnt: str(it.locationNo1, '?'),
-        vehicleType: LOW_PLATE[str(it.lowPlate1, '0')] ?? '일반버스',
-        vehicleIdOrPlate: plate,
-        extraInfo: extra.join(' | '),
-      });
+      for (const n of ['1', '2']) {
+        const pred = str(it[`predictTime${n}`]);
+        if (!pred) continue;
+        const plate = str(it[`plateNo${n}`]);
+        const seatRaw = str(it[`remainSeatCnt${n}`]);
+        const seat = Number(seatRaw);
+        const extra: string[] = [];
+        if (dest) extra.push(`종점방향: ${dest}`);
+        if (seatRaw !== '' && Number.isFinite(seat) && seat >= 0) extra.push(`잔여좌석: ${seat}석`);
+        if (plate) extra.push(`차량번호: ${plate}`);
+        out.push({
+          regionLabel: '성남/경기',
+          stopName: stopName || `정류소(${q.stopNo})`,
+          stopNo: q.stopNo,
+          routeNo: routeNm,
+          arrSec: Number(pred) * 60,
+          prevStationCnt: str(it[`locationNo${n}`], '?'),
+          vehicleType: LOW_PLATE[str(it[`lowPlate${n}`], '0')] ?? '일반버스',
+          vehicleIdOrPlate: plate,
+          extraInfo: extra.join(' | '),
+          routeType,
+        });
+      }
     }
     return out.sort((a, b) => a.arrSec - b.arrSec);
   } catch (e) {
@@ -337,26 +352,30 @@ async function fetchSeoulArrivals(key: string, q: ArrivalQuery): Promise<Unified
     const rtNm = str(it.rtNm);
     const abrv = str(it.busRouteAbrv);
     if (want.size && !want.has(rtNm.toUpperCase()) && !want.has(abrv.toUpperCase())) continue;
-    const arrmsg1 = str(it.arrmsg1);
-    const { sec, prevCnt } = parseSeoulArrmsgSeconds(it.traTime1, arrmsg1);
-    if (sec === null) continue;
     const stNm = str(it.stNm, q.stopNo);
     const dir = str(it.adirection);
-    const plain = str(it.plainNo1);
-    const extra = [`현황: ${arrmsg1}`];
-    if (dir) extra.push(`진행방향: ${dir}`);
-    if (plain) extra.push(`차량번호: ${plain}`);
-    out.push({
-      regionLabel: '서울',
-      stopName: q.stopName || (dir ? `${stNm} (${dir} 방면, ${q.stopNo})` : `${stNm} (${q.stopNo})`),
-      stopNo: q.stopNo,
-      routeNo: rtNm || abrv,
-      arrSec: sec,
-      prevStationCnt: prevCnt,
-      vehicleType: '시내/광역버스',
-      vehicleIdOrPlate: plain || str(it.vehId1),
-      extraInfo: extra.join(' | '),
-    });
+    const routeType = SEOUL_ROUTE_TYPES[str(it.routeType)] ?? '';
+    for (const n of ['1', '2']) {
+      const arrmsg = str(it[`arrmsg${n}`]);
+      const { sec, prevCnt } = parseSeoulArrmsgSeconds(it[`traTime${n}`], arrmsg);
+      if (sec === null) continue;
+      const plain = str(it[`plainNo${n}`]);
+      const extra = [`현황: ${arrmsg}`];
+      if (dir) extra.push(`진행방향: ${dir}`);
+      if (plain) extra.push(`차량번호: ${plain}`);
+      out.push({
+        regionLabel: '서울',
+        stopName: q.stopName || (dir ? `${stNm} (${dir} 방면, ${q.stopNo})` : `${stNm} (${q.stopNo})`),
+        stopNo: q.stopNo,
+        routeNo: rtNm || abrv,
+        arrSec: sec,
+        prevStationCnt: prevCnt,
+        vehicleType: '시내/광역버스',
+        vehicleIdOrPlate: plain || str(it[`vehId${n}`]),
+        extraInfo: extra.join(' | '),
+        routeType,
+      });
+    }
   }
   return out.sort((a, b) => a.arrSec - b.arrSec);
 }

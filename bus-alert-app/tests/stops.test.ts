@@ -101,3 +101,44 @@ describe('regionFromAddress', () => {
     assert.equal(regionFromAddress(['제주특별자치도']), null);
   });
 });
+
+import { fetchArrivals } from '../src/core/busApi';
+import { routeStyle } from '../src/core/routeStyle';
+
+describe('노선 색상', () => {
+  it('종류별 색상', () => {
+    assert.equal(routeStyle('간선', '472').color, '#2F5DBA');
+    assert.equal(routeStyle('지선', '3412').color, '#4CAF3E');
+    assert.equal(routeStyle('광역급행', 'M4102').color, '#E0322B');
+    assert.equal(routeStyle('', 'M4102').color, '#E0322B');
+    assert.equal(routeStyle('마을', '서초09').label, '마을');
+  });
+});
+
+describe('두 번째 버스', () => {
+  it('서울 arrmsg2 / 노선종류', async () => {
+    mockFetch({
+      getStationByUid: {
+        msgHeader: { headerCd: '0' },
+        msgBody: { itemList: [{ rtNm: '472', routeType: '3', arrmsg1: '3분12초후[2번째 전]', arrmsg2: '12분후[7번째 전]', plainNo1: 'A', plainNo2: 'B' }] },
+      },
+    });
+    const list = await fetchArrivals('KEY', { region: 'seoul', stopNo: '22009', routes: [] });
+    assert.equal(list.length, 2);
+    assert.equal(list[0].routeType, '간선');
+    assert.equal(list[1].prevStationCnt, '7');
+    assert.equal(list[1].vehicleIdOrPlate, 'B');
+  });
+  it('경기 predictTime2', async () => {
+    mockFetch({
+      getBusArrivalListv2: {
+        response: { msgHeader: { resultCode: 0 }, msgBody: { busArrivalList: [
+          { routeName: '9407', routeTypeCd: 11, predictTime1: 4, locationNo1: 2, plateNo1: 'P1', predictTime2: 20, locationNo2: 9, plateNo2: 'P2' },
+        ] } },
+      },
+    });
+    const list = await fetchArrivals('KEY', { region: 'gyeonggi', stopNo: '1', stationId: 'S', routes: [] });
+    assert.deepEqual(list.map((a) => a.arrSec), [240, 1200]);
+    assert.equal(list[0].routeType, '직행좌석');
+  });
+});

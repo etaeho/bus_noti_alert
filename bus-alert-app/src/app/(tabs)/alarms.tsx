@@ -6,8 +6,8 @@ import * as Notifications from 'expo-notifications';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { HeroHeader, HeroPill } from '../../components/HeroHeader';
 import { LiveArrivals } from '../../components/LiveArrivals';
 import { Button, Card, EmptyState, Fab, Icon, ListRow, Muted, Pill, RouteBadge, SectionTitle, useTheme } from '../../components/ui';
 import { describeAlertRule } from '../../core/format';
@@ -42,7 +42,6 @@ function nextLabel(d: Date, now: Date): string {
 
 export default function AlarmsScreen() {
   const t = useTheme();
-  const insets = useSafeAreaInsets();
   const status = useMonitoringStatus();
   const [alarms, setAlarms] = useState<BusAlarm[]>([]);
   const [states, setStates] = useState<Record<string, AlarmRuntimeState>>({});
@@ -95,20 +94,20 @@ export default function AlarmsScreen() {
   const setupDone = setup ? setup.apiKey && setup.notifications && setup.background && alarms.length > 0 : true;
   const today = `${now.getMonth() + 1}월 ${now.getDate()}일 ${'일월화수목금토'[now.getDay()]}요일`;
 
-  const statusPill = ride?.active ? (
-    <Pill text="하차 알림 진행 중" tone="success" icon="flag" />
-  ) : activeAlarms.length ? (
-    <Pill text={`${activeAlarms.length}개 감시 중`} tone="success" icon="radio" />
-  ) : alarms.some((a) => a.enabled) ? (
-    <Pill text={status.running ? '대기 중 (백그라운드)' : '대기 중'} tone="primary" icon="time" />
-  ) : (
-    <Pill text="켜진 알림 없음" icon="moon" />
-  );
+  const statusText = ride?.active
+    ? '🚏 하차 알림 중'
+    : activeAlarms.length
+      ? `● ${activeAlarms.length}개 감시 중`
+      : alarms.some((a) => a.enabled)
+        ? status.running
+          ? '대기 중 · 백그라운드 ON'
+          : '대기 중'
+        : '켜진 알림 없음';
 
   return (
     <View style={{ flex: 1 }}>
       <ScrollView
-        contentContainerStyle={[styles.container, { paddingTop: insets.top + 12 }]}
+        contentContainerStyle={styles.container}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -120,14 +119,8 @@ export default function AlarmsScreen() {
           />
         }
       >
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.date, { color: t.sub }]}>{today}</Text>
-            <Text style={[styles.h1, { color: t.text }]}>내 알림</Text>
-          </View>
-          {statusPill}
-        </View>
-
+        <HeroHeader title="내 알림" subtitle={today} right={<HeroPill text={statusText} />} />
+        <View style={styles.body}>
         {setup && !setupDone ? (
           <Card>
             <Text style={[styles.cardTitle, { color: t.text }]}>처음 설정하기</Text>
@@ -306,6 +299,7 @@ export default function AlarmsScreen() {
           )}
         </Card>
         <View style={{ height: 80 }} />
+        </View>
       </ScrollView>
       {alarms.length > 0 ? <Fab label="알림 추가" onPress={() => router.push('/alarm/new')} /> : null}
     </View>
@@ -313,7 +307,8 @@ export default function AlarmsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { paddingHorizontal: 16, paddingBottom: 24 },
+  container: { paddingBottom: 24 },
+  body: { paddingHorizontal: 16, paddingTop: 14 },
   header: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 14 },
   date: { fontSize: 13, fontWeight: '700' },
   h1: { fontSize: 28, fontWeight: '900', marginTop: 2 },

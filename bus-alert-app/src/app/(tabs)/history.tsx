@@ -5,6 +5,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native';
 
+import { HeroHeader } from '../../components/HeroHeader';
 import { Chip, EmptyState, Icon, useTheme, type IconName } from '../../components/ui';
 import { clearHistory, getHistory, markHistorySeen, type HistoryEntry, type HistoryKind } from '../../services/storage';
 
@@ -82,7 +83,8 @@ export default function HistoryScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <View style={[styles.filters, { backgroundColor: t.card, borderColor: t.border }]}>
+      <HeroHeader title="알림 기록" subtitle={`받은 알림 ${items.length}건`} />
+      <View style={styles.filters}>
         <Chip label="전체" selected={filter === 'all'} onPress={() => setFilter('all')} />
         <Chip label="버스 도착" selected={filter === 'bus'} onPress={() => setFilter('bus')} />
         <Chip label="하차" selected={filter === 'ride'} onPress={() => setFilter('ride')} />
@@ -97,7 +99,7 @@ export default function HistoryScreen() {
       <SectionList
         sections={sections}
         keyExtractor={(e) => e.id}
-        contentContainerStyle={{ padding: 16, paddingBottom: 40, flexGrow: 1 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40, flexGrow: 1 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -154,9 +156,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 2,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingTop: 12,
+    paddingBottom: 0,
   },
   day: { fontSize: 13, fontWeight: '800', marginTop: 8, marginBottom: 8, marginLeft: 4 },
   item: {

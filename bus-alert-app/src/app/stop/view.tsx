@@ -60,7 +60,7 @@ export default function StopViewScreen() {
           title: stop.stopName || '정류장',
           headerRight: () => (
             <Pressable onPress={toggleFav} hitSlop={12} accessibilityLabel={fav ? '즐겨찾기 해제' : '즐겨찾기 추가'}>
-              <Icon name={fav ? 'star' : 'star-outline'} size={24} color={fav ? '#F5B301' : t.text} />
+              <Icon name={fav ? 'star' : 'star-outline'} size={24} color={fav ? '#FFD34D' : '#FFFFFF'} />
             </Pressable>
           ),
         }}

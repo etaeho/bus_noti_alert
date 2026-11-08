@@ -1,15 +1,17 @@
 /**
- * 정류장 실시간 도착 정보 (N초마다 자동 새로고침, 화면이 보일 때만)
+ * 정류장 실시간 도착 정보
+ *  - 노선별로 묶어 "이번 버스 / 다음 버스"를 보여 줌 (국내 버스 앱 방식)
+ *  - 노선 종류별 색상 · N초마다 자동 새로고침 (화면이 보일 때만)
  */
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { fetchArrivals, type ArrivalQuery } from '../core/busApi';
-import { formatArrSec } from '../core/format';
+import { routeStyle } from '../core/routeStyle';
 import type { UnifiedArrival } from '../core/types';
 import { getApiKey } from '../services/storage';
-import { Muted, useTheme } from './ui';
+import { Icon, Muted, useTheme } from './ui';
 
 export interface LiveArrivalsProps {
   /** 조회할 정류장 (null 이면 표시 안 함) */
@@ -19,9 +21,38 @@ export interface LiveArrivalsProps {
   /** 노선 줄을 누르면 호출 (노선 선택용) */
   onRoutePress?: (routeNo: string) => void;
   intervalSec?: number;
+  /** 최대 노선 수 */
   maxRows?: number;
   /** 즐겨찾기 목록용 작은 표시 (테두리·제목 없이) */
   compact?: boolean;
+}
+
+interface RouteGroup {
+  routeNo: string;
+  routeType?: string;
+  buses: UnifiedArrival[];
+}
+
+function eta(sec: number): string {
+  if (sec <= 60) return '곧 도착';
+  const m = Math.round(sec / 60);
+  return `${m}분`;
+}
+
+function stopsLabel(cnt: string): string {
+  const m = cnt.match(/\d+/);
+  if (!m) return '';
+  return Number(m[0]) === 0 ? '' : `${m[0]}정거장 전`;
+}
+
+function group(list: UnifiedArrival[]): RouteGroup[] {
+  const map = new Map<string, RouteGroup>();
+  for (const a of [...list].sort((x, y) => x.arrSec - y.arrSec)) {
+    const g = map.get(a.routeNo) ?? { routeNo: a.routeNo, routeType: a.routeType, buses: [] };
+    g.buses.push(a);
+    map.set(a.routeNo, g);
+  }
+  return [...map.values()];
 }
 
 function timeLabel(d: Date): string {
@@ -61,7 +92,6 @@ export function LiveArrivals({
     } finally {
       if (my === seq.current) setLoading(false);
     }
-    // key 가 바뀔 때만 새 함수
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
@@ -73,8 +103,6 @@ export function LiveArrivals({
   );
 
   useEffect(() => {
-    setRows(null);
-    setError('');
     if (!query || !focused) return;
     void load();
     const id = setInterval(() => {
@@ -84,63 +112,111 @@ export function LiveArrivals({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, focused, intervalSec, load]);
 
+  useEffect(() => {
+    setRows(null);
+    setError('');
+  }, [key]);
+
   if (!query) return null;
 
   const hl = new Set(highlight.map((h) => h.toUpperCase()));
-  const sorted = [...(rows ?? [])].sort((a, b) => {
+  const groups = group(rows ?? []).sort((a, b) => {
     const ah = hl.has(a.routeNo.toUpperCase()) ? 0 : 1;
     const bh = hl.has(b.routeNo.toUpperCase()) ? 0 : 1;
-    return ah - bh || a.arrSec - b.arrSec;
+    return ah - bh || a.buses[0].arrSec - b.buses[0].arrSec;
   });
 
-  return (
-    <View style={compact ? { marginTop: 6 } : [styles.wrap, { borderColor: t.border, backgroundColor: t.card }]}>
-      <View style={[styles.header, compact && { display: 'none' }]}>
-        <Text style={[styles.title, { color: t.text }]}>🚌 실시간 도착 정보</Text>
-        <Pressable onPress={() => void load()} hitSlop={10} accessibilityRole="button" accessibilityLabel="새로고침">
-          {loading ? (
-            <ActivityIndicator size="small" />
-          ) : (
-            <Text style={{ color: t.primary, fontWeight: '700' }}>↻ 새로고침</Text>
-          )}
-        </Pressable>
-      </View>
+  const body = (
+    <>
+      {error ? (
+        <View style={[styles.notice, { backgroundColor: t.dangerSoft }]}>
+          <Icon name="alert-circle" size={16} color={t.danger} />
+          <Text style={{ color: t.danger, marginLeft: 6, flex: 1, fontSize: 13 }}>{error}</Text>
+        </View>
+      ) : null}
+      {rows && rows.length === 0 && !error ? (
+        <View style={styles.emptyRow}>
+          <Icon name="moon-outline" size={18} color={t.sub} />
+          <Text style={{ color: t.sub, marginLeft: 8 }}>지금 도착 예정인 버스가 없습니다</Text>
+        </View>
+      ) : null}
+      {!rows && !error
+        ? [0, 1, compact ? -1 : 2].filter((i) => i >= 0).map((i) => (
+            <View key={i} style={[styles.skeleton, { backgroundColor: t.chip }]} />
+          ))
+        : null}
 
-      {error ? <Muted style={{ color: t.danger }}>{error}</Muted> : null}
-      {rows && rows.length === 0 && !error ? <Muted>지금 도착 예정인 버스가 없습니다.</Muted> : null}
-      {!rows && !error ? <Muted>불러오는 중…</Muted> : null}
-
-      {sorted.slice(0, maxRows).map((a, i) => {
-        const on = hl.has(a.routeNo.toUpperCase());
-        const soon = a.arrSec <= 120;
+      {groups.slice(0, maxRows).map((g, i) => {
+        const on = hl.has(g.routeNo.toUpperCase());
+        const rs = routeStyle(g.routeType, g.routeNo);
+        const first = g.buses[0];
+        const second = g.buses[1];
+        const soon = first.arrSec <= 120;
+        const plate = first.vehicleIdOrPlate;
+        const seats = first.extraInfo.match(/잔여좌석: (\d+)석/)?.[1];
         return (
           <Pressable
-            key={`${a.routeNo}-${a.vehicleIdOrPlate}-${i}`}
-            onPress={onRoutePress ? () => onRoutePress(a.routeNo) : undefined}
-            style={[styles.row, { borderColor: t.border }, on && { backgroundColor: t.chip }]}
+            key={g.routeNo}
+            onPress={onRoutePress ? () => onRoutePress(g.routeNo) : undefined}
+            style={[
+              styles.row,
+              i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.border },
+              on && { backgroundColor: t.primarySoft },
+            ]}
           >
-            <View style={[styles.badge, { backgroundColor: on ? t.primary : t.inputBg, borderColor: t.border }]}>
-              <Text style={{ color: on ? t.primaryText : t.text, fontWeight: '800' }}>{a.routeNo}</Text>
-            </View>
+            <View style={[styles.bar, { backgroundColor: rs.color }]} />
             <View style={{ flex: 1 }}>
-              <Text style={{ color: soon ? t.danger : t.text, fontWeight: '700', fontSize: 15 }}>
-                {a.prevStationCnt}정거장 전 · {formatArrSec(a.arrSec)} 후
-              </Text>
-              {!compact && (a.extraInfo || a.vehicleIdOrPlate) ? (
-                <Text numberOfLines={1} style={{ color: t.sub, fontSize: 12 }}>
-                  {[a.vehicleIdOrPlate && !a.extraInfo.includes(a.vehicleIdOrPlate) ? a.vehicleIdOrPlate : '', a.extraInfo]
-                    .filter(Boolean)
-                    .join(' · ')}
+              <View style={styles.routeLine}>
+                <Text style={[styles.routeNo, { color: rs.color }]}>{g.routeNo}</Text>
+                <Text style={[styles.routeType, { color: t.sub }]}>{rs.label}</Text>
+              </View>
+              {!compact && (plate || seats) ? (
+                <Text style={{ color: t.sub, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
+                  {[plate, seats ? `좌석 ${seats}` : ''].filter(Boolean).join(' · ')}
                 </Text>
               ) : null}
             </View>
-            {onRoutePress ? <Text style={{ color: on ? t.primary : t.sub, fontSize: 18 }}>{on ? '✓' : '＋'}</Text> : null}
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={[styles.eta, { color: soon ? t.danger : t.text }]}>{eta(first.arrSec)}</Text>
+              <Text style={{ color: t.sub, fontSize: 12 }}>
+                {stopsLabel(first.prevStationCnt)}
+                {second ? `  ·  다음 ${eta(second.arrSec)}` : ''}
+              </Text>
+            </View>
+            {onRoutePress ? (
+              <View style={[styles.check, { borderColor: on ? t.primary : t.border, backgroundColor: on ? t.primary : 'transparent' }]}>
+                {on ? <Icon name="checkmark" size={14} color="#fff" /> : null}
+              </View>
+            ) : null}
           </Pressable>
         );
       })}
+    </>
+  );
 
-      <Muted style={{ marginTop: 6, fontSize: 12 }}>
-        {updatedAt ? (compact ? `${timeLabel(updatedAt)} 기준` : `${timeLabel(updatedAt)} 기준 · ${intervalSec}초마다 자동 갱신`) : ''}
+  if (compact) {
+    return (
+      <View style={{ marginTop: 8 }}>
+        {body}
+        {updatedAt ? <Muted style={{ marginTop: 4, fontSize: 11 }}>{timeLabel(updatedAt)} 기준</Muted> : null}
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.wrap, { backgroundColor: t.card, shadowColor: t.shadow }]}>
+      <View style={styles.header}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={[styles.liveDot, { backgroundColor: error ? t.danger : t.success }]} />
+          <Text style={[styles.title, { color: t.text }]}>실시간 도착 정보</Text>
+        </View>
+        <Pressable onPress={() => void load()} hitSlop={10} accessibilityRole="button" accessibilityLabel="새로고침">
+          {loading ? <ActivityIndicator size="small" /> : <Icon name="refresh" size={20} color={t.primary} />}
+        </Pressable>
+      </View>
+      {body}
+      <Muted style={{ marginTop: 8, fontSize: 12 }}>
+        {updatedAt ? `${timeLabel(updatedAt)} 기준 · ${intervalSec}초마다 자동 갱신` : ''}
         {onRoutePress ? ' · 노선을 누르면 선택/해제' : ''}
       </Muted>
     </View>
@@ -148,9 +224,26 @@ export function LiveArrivals({
 }
 
 const styles = StyleSheet.create({
-  wrap: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 12, marginTop: 10 },
+  wrap: {
+    borderRadius: 20,
+    padding: 14,
+    marginTop: 12,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
-  title: { fontSize: 15, fontWeight: '800' },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 6, borderTopWidth: StyleSheet.hairlineWidth, borderRadius: 8 },
-  badge: { minWidth: 54, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, alignItems: 'center', marginRight: 10 },
+  liveDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+  title: { fontSize: 16, fontWeight: '900' },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingRight: 4, borderRadius: 10 },
+  bar: { width: 4, alignSelf: 'stretch', borderRadius: 2, marginRight: 10 },
+  routeLine: { flexDirection: 'row', alignItems: 'baseline' },
+  routeNo: { fontSize: 19, fontWeight: '900' },
+  routeType: { fontSize: 12, fontWeight: '700', marginLeft: 6 },
+  eta: { fontSize: 19, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  check: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginLeft: 10 },
+  skeleton: { height: 44, borderRadius: 10, marginVertical: 5 },
+  notice: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, marginVertical: 4 },
+  emptyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
 });

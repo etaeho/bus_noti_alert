@@ -38,6 +38,7 @@ const light = {
   chip: '#EEF2F7',
   inputBg: '#F7F8FA',
   shadow: '#0F172A',
+  heroBg: '#1D4ED8',
 };
 const dark: typeof light = {
   bg: '#0B0F17',
@@ -57,6 +58,7 @@ const dark: typeof light = {
   chip: '#1E2635',
   inputBg: '#101520',
   shadow: '#000000',
+  heroBg: '#15244A',
 };
 export type Theme = typeof light;
 export type IconName = ComponentProps<typeof Ionicons>['name'];

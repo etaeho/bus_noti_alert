@@ -4,8 +4,8 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { HeroHeader } from '../../components/HeroHeader';
 import { LiveArrivals } from '../../components/LiveArrivals';
 import { Button, Card, EmptyState, Icon, Muted, SectionTitle, useTheme } from '../../components/ui';
 import { REGION_LABELS } from '../../core/types';
@@ -21,7 +21,6 @@ import {
 
 export default function StopsScreen() {
   const t = useTheme();
-  const insets = useSafeAreaInsets();
   const [favorites, setFavorites] = useState<FavoriteStop[]>([]);
   const [recent, setRecent] = useState<FavoriteStop[]>([]);
   const [hasKey, setHasKey] = useState(true);
@@ -57,7 +56,7 @@ export default function StopsScreen() {
 
   return (
     <ScrollView
-      contentContainerStyle={[styles.container, { paddingTop: insets.top + 12 }]}
+      contentContainerStyle={styles.container}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -70,36 +69,33 @@ export default function StopsScreen() {
         />
       }
     >
-      <Text style={[styles.h1, { color: t.text }]}>정류장</Text>
-      <Muted style={{ marginBottom: 14 }}>정류장을 찾아 실시간 버스 도착 시간을 확인하세요.</Muted>
-
-      <Pressable
-        onPress={() => router.push({ pathname: '/stop-picker', params: { purpose: 'view', focus: '1' } })}
-        style={[styles.search, { backgroundColor: t.card, borderColor: t.border, shadowColor: t.shadow }]}
-        accessibilityRole="search"
-      >
-        <Icon name="search" size={20} color={t.sub} />
-        <Text style={{ color: t.sub, fontSize: 16, marginLeft: 10, flex: 1 }}>정류장 이름 검색 (예: 명석고)</Text>
-      </Pressable>
-      <View style={styles.quick}>
-        <Button
-          title="내 주변 정류장"
-          icon="navigate"
-          variant="secondary"
-          small
-          onPress={() => router.push({ pathname: '/stop-picker', params: { purpose: 'view' } })}
-          style={{ flex: 1, marginRight: 8 }}
-        />
-        <Button
-          title="지도에서 찾기"
-          icon="map"
-          variant="secondary"
-          small
-          onPress={() => router.push({ pathname: '/stop-picker', params: { purpose: 'view' } })}
-          style={{ flex: 1 }}
-        />
-      </View>
-
+      <HeroHeader title="정류장" subtitle="실시간 버스 도착 정보">
+        <Pressable
+          onPress={() => router.push({ pathname: '/stop-picker', params: { purpose: 'view', focus: '1' } })}
+          style={styles.search}
+          accessibilityRole="search"
+        >
+          <Icon name="search" size={20} color="#64748B" />
+          <Text style={{ color: '#64748B', fontSize: 16, marginLeft: 10, flex: 1 }}>정류장 이름 검색 (예: 명석고)</Text>
+        </Pressable>
+        <View style={styles.quick}>
+          <Pressable
+            onPress={() => router.push({ pathname: '/stop-picker', params: { purpose: 'view' } })}
+            style={styles.quickBtn}
+          >
+            <Icon name="navigate" size={16} color="#fff" />
+            <Text style={styles.quickText}>내 주변 정류장</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push({ pathname: '/stop-picker', params: { purpose: 'view' } })}
+            style={[styles.quickBtn, { marginLeft: 8 }]}
+          >
+            <Icon name="map" size={16} color="#fff" />
+            <Text style={styles.quickText}>지도에서 찾기</Text>
+          </Pressable>
+        </View>
+      </HeroHeader>
+      <View style={styles.body}>
       {!hasKey ? (
         <Card onPress={() => router.push('/settings')} style={{ borderLeftWidth: 4, borderLeftColor: t.warning }}>
           <Text style={{ color: t.text, fontWeight: '800', fontSize: 15 }}>API 키를 먼저 입력해 주세요</Text>
@@ -211,26 +207,33 @@ export default function StopsScreen() {
           </Card>
         </>
       ) : null}
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { paddingHorizontal: 16, paddingBottom: 40 },
-  h1: { fontSize: 28, fontWeight: '900' },
+  container: { paddingBottom: 40 },
+  body: { paddingHorizontal: 16, paddingTop: 8 },
   search: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
   },
-  quick: { flexDirection: 'row', marginTop: 10, marginBottom: 6 },
+  quick: { flexDirection: 'row', marginTop: 10 },
+  quickBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 12,
+    paddingVertical: 10,
+  },
+  quickText: { color: '#FFFFFF', fontWeight: '800', marginLeft: 6 },
   favHead: { flexDirection: 'row', alignItems: 'center' },
   favName: { fontSize: 17, fontWeight: '800' },
   editBtn: { padding: 6, marginLeft: 4 },

@@ -6,6 +6,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { HeroHeader } from '../../components/HeroHeader';
 import { LiveArrivals } from '../../components/LiveArrivals';
 import { Button, Card, Chip, Field, Label, Muted, SectionTitle, ToggleRow, useTheme } from '../../components/ui';
 import { formatArrSec } from '../../core/format';
@@ -140,6 +141,8 @@ export default function RideScreen() {
   if (r.active) {
     return (
       <ScrollView contentContainerStyle={styles.container}>
+        <HeroHeader title="하차 알림" subtitle="내릴 정류장 몇 정거장 전에 알려드려요" />
+        <View style={{ padding: 16 }}>
         <Card>
           <Muted>하차 알림 진행 중</Muted>
           <Text style={[styles.big, { color: t.text }]}>
@@ -172,6 +175,7 @@ export default function RideScreen() {
         </Muted>
         <Button title="다음 버스로 바꾸기" icon="swap-horizontal" variant="secondary" onPress={nextBus} />
         <Button title="하차 알림 종료" icon="stop-circle" variant="danger" onPress={stop} style={{ marginTop: 10 }} />
+      </View>
       </ScrollView>
     );
   }
@@ -179,6 +183,8 @@ export default function RideScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <HeroHeader title="하차 알림" subtitle="내릴 정류장 몇 정거장 전에 알려드려요" />
+        <View style={{ padding: 16 }}>
         <Muted style={{ marginBottom: 12 }}>
           버스에 탄 뒤 내릴 정류장과 노선을 고르고 시작을 누르세요. 내 버스가 내릴 정류장 몇 정거장 전에 왔는지 알려 드립니다.
         </Muted>
@@ -235,13 +241,14 @@ export default function RideScreen() {
         </Card>
 
         <Button title="하차 알림 시작" icon="play" onPress={start} disabled={!(r.stopNo || r.stationId) || !r.routeNo.trim()} />
+      </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 60 },
+  container: { paddingBottom: 60 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 6 },
   stopBox: { borderWidth: 1, borderRadius: 10, padding: 12 },
   big: { fontSize: 20, fontWeight: '800', marginVertical: 6 },
