@@ -130,13 +130,14 @@ jobs:
 
       - name: 결과 요약
         if: always()
+        working-directory: .
         run: |
           PAGE="${{ steps.build.outputs.page || steps.check.outputs.page }}"
           APK="${{ steps.build.outputs.apk || steps.check.outputs.apk }}"
           {
             echo "## 📱 버스 알리미 Android 미리보기"
             echo ""
-            echo "- 커밋: \`$(git log -1 --pretty='%h %s')\`"
+            echo "- 커밋: \`$(git log -1 --pretty='%h %s' 2>/dev/null)\`"
             echo "- 런타임 버전: \`${{ steps.rv.outputs.runtime }}\`"
             if [ "${{ steps.check.outputs.need_build }}" = "true" ]; then
               echo "- 방식: **새 APK 빌드** (네이티브 변경 또는 최초 빌드)"
