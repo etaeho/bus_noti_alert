@@ -6,6 +6,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { LiveArrivals } from '../components/LiveArrivals';
 import { Button, Card, Chip, Field, Label, Muted, SectionTitle, ToggleRow, useTheme } from '../components/ui';
 import { formatArrSec } from '../core/format';
 import { REGION_LABELS, type RideAlert, type RideRuntimeState } from '../core/types';
@@ -160,6 +161,12 @@ export default function RideScreen() {
             </Muted>
           ) : null}
         </Card>
+        <LiveArrivals
+          query={{ region: r.region, stopNo: r.stopNo, stationId: r.stationId, cityCode: r.cityCode, stopName: r.stopName }}
+          highlight={[r.routeNo]}
+          maxRows={5}
+        />
+        <View style={{ height: 12 }} />
         <Muted style={{ marginBottom: 8 }}>
           내가 탄 버스가 아닌 앞 버스가 잡혔다면(남은 정거장 수가 너무 적으면) 아래 버튼으로 다음 버스로 바꾸세요.
         </Muted>
@@ -189,6 +196,15 @@ export default function RideScreen() {
             variant={r.stopName || r.stopNo ? 'secondary' : 'primary'}
             onPress={() => router.push({ pathname: '/stop-picker', params: { purpose: 'ride' } })}
             style={{ marginTop: 8 }}
+          />
+          <LiveArrivals
+            query={
+              r.stopNo || r.stationId
+                ? { region: r.region, stopNo: r.stopNo, stationId: r.stationId, cityCode: r.cityCode, stopName: r.stopName }
+                : null
+            }
+            highlight={r.routeNo ? [r.routeNo] : []}
+            onRoutePress={(rt) => set({ routeNo: rt })}
           />
 
           <View style={{ height: 14 }} />

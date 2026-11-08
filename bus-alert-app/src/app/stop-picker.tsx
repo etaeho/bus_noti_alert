@@ -17,6 +17,7 @@ import {
   View,
 } from 'react-native';
 
+import { LiveArrivals } from '../components/LiveArrivals';
 import { StopMap, type MapStop, type StopMapHandle } from '../components/StopMap';
 import { Button, Chip, Muted, useTheme } from '../components/ui';
 import { distanceM } from '../core/decide';
@@ -301,7 +302,7 @@ export default function StopPickerScreen() {
         data={results}
         keyExtractor={(s, i) => `${stopKey(s)}-${i}`}
         renderItem={renderItem}
-        contentContainerStyle={{ padding: 12, paddingBottom: selectedStop ? 120 : 40 }}
+        contentContainerStyle={{ padding: 12, paddingBottom: selectedStop ? 380 : 40 }}
         keyboardShouldPersistTaps="handled"
       />
 
@@ -311,6 +312,18 @@ export default function StopPickerScreen() {
             {selectedStop.stopName}
             {dirObj?.label ? ` · ${dirObj.label}` : ''}
           </Text>
+          <ScrollView style={{ maxHeight: 230 }} nestedScrollEnabled>
+            <LiveArrivals
+              query={{
+                region: selectedStop.region,
+                stopNo: selectedStop.stopNo,
+                stationId: selectedStop.stationId,
+                cityCode: selectedStop.cityCode,
+                stopName: selectedStop.stopName,
+              }}
+              maxRows={8}
+            />
+          </ScrollView>
           <Button title="이 정류장 선택" onPress={confirm} style={{ marginTop: 8 }} />
         </View>
       ) : null}

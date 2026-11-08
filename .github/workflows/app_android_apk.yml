@@ -30,6 +30,9 @@ jobs:
     defaults:
       run:
         working-directory: bus-alert-app
+    env:
+      # 선택: 저장소 Secrets 에 등록하면 Google 지도 사용 (없으면 기본 지도)
+      GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
 
     steps:
       - uses: actions/checkout@v4

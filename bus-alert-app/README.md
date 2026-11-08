@@ -74,6 +74,20 @@ npx expo run:android   # 또는 npx expo run:ios (macOS + Xcode)
 - 설치된 버전은 앱의 **설정 → 앱 버전**에서 확인합니다(빌드 번호·커밋). 같은 화면의 **최신 APK 받기** 버튼으로 바로 내려받을 수 있습니다.
 - 최신 64비트(arm64) 폰 전용으로 빌드합니다.
 
+## 🗺️ Google 지도 사용 (선택)
+
+기본 지도는 키가 필요 없는 OpenStreetMap(CARTO) 지도입니다. Google 지도를 쓰려면:
+
+1. [Google Cloud Console](https://console.cloud.google.com/)에서 프로젝트를 만들고 결제 계정을 연결합니다.
+2. **Maps SDK for Android**를 사용 설정하고 **API 키**를 만듭니다.
+3. 키 제한을 설정합니다.
+   - API 제한: Maps SDK for Android만
+   - 애플리케이션 제한: Android 앱 · 패키지 `com.busnoti.alertapp` · SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`(Expo 기본 debug 키스토어)
+4. GitHub 저장소 **Settings → Secrets and variables → Actions**에 `GOOGLE_MAPS_API_KEY`로 등록합니다.
+5. 다음 빌드부터 Google 지도로 바뀝니다. 키는 저장소에 커밋되지 않고, 빌드할 때만 들어갑니다.
+
+Maps SDK for Android의 지도 표시는 Google 요금표상 무제한 무료입니다. 단, 키를 만들려면 결제 계정이 필요합니다. 이 앱은 장소 검색이나 경로 같은 유료 API를 쓰지 않습니다.
+
 ## 백그라운드 동작 방식
 
 모바일 OS는 앱이 백그라운드에서 1분마다 네트워크를 쓰는 것을 기본적으로 막습니다. 그래서 다음처럼 겹겹이 구성했습니다 (`src/services/background.ts`).

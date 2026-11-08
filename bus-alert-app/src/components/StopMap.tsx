@@ -5,6 +5,7 @@
  *  - 지도를 움직이면 onMoved(중심 좌표)
  */
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ComponentType, type Ref } from 'react';
+import Constants from 'expo-constants';
 import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent, type WebViewProps } from 'react-native-webview';
 
@@ -87,7 +88,7 @@ window.focusTo=function(lat,lng,z){map.setView([lat,lng],z||16)};
 post({type:'ready'});
 </script></body></html>`;
 
-export const StopMap = forwardRef<StopMapHandle, StopMapProps>(function StopMap(
+const LeafletStopMap = forwardRef<StopMapHandle, StopMapProps>(function LeafletStopMap(
   { stops, selectedId, me, arrowTo, onSelect, onMoved, height = 300 },
   ref,
 ) {
@@ -141,3 +142,16 @@ const styles = StyleSheet.create({
   wrap: { borderRadius: 14, overflow: 'hidden', backgroundColor: '#e8ecf2' },
   web: { flex: 1, backgroundColor: 'transparent' },
 });
+
+/**
+ * 빌드에 Google 지도 키가 들어 있으면 Google 지도, 없으면 키가 필요 없는 기본 지도.
+ * (GoogleStopMap 은 키가 있을 때만 불러온다 - 키 없이 Google 지도를 띄우면 앱이 종료됨)
+ */
+const googleMapsEnabled = Boolean(
+  (Constants.expoConfig?.extra as { googleMapsEnabled?: boolean } | undefined)?.googleMapsEnabled,
+);
+
+export const StopMap: typeof LeafletStopMap = googleMapsEnabled
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('./GoogleStopMap') as typeof import('./GoogleStopMap')).GoogleStopMap
+  : LeafletStopMap;

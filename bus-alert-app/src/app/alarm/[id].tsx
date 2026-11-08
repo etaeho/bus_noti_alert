@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 
+import { LiveArrivals } from '../../components/LiveArrivals';
 import { Button, Card, Chip, Field, Label, Muted, SectionTitle, Stepper, TimeStepper, ToggleRow, useTheme } from '../../components/ui';
 import { fetchArrivals, lookupStop } from '../../core/busApi';
 import { formatArrSec } from '../../core/format';
@@ -223,6 +224,15 @@ export default function AlarmEditScreen() {
             style={{ marginTop: 8 }}
           />
           {stopMsg ? <Muted style={{ marginTop: 6 }}>{stopMsg}</Muted> : null}
+          <LiveArrivals
+            query={
+              a.stopNo || a.stationId
+                ? { region: a.region, stopNo: a.stopNo, stationId: a.stationId, cityCode: a.cityCode, stopName: a.stopName }
+                : null
+            }
+            highlight={currentRoutes}
+            onRoutePress={toggleRoute}
+          />
 
           <Pressable onPress={() => setManual(!manual)} style={{ marginTop: 12 }}>
             <Text style={{ color: t.primary, fontWeight: '600' }}>
