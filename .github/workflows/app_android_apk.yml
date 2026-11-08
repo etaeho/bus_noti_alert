@@ -1,0 +1,94 @@
+name: 버스 알리미 앱 - Android APK
+
+# bus-alert-app/ 을 수정해서 어느 브랜치든 push 하면 APK 를 빌드해서
+#  1) Actions 아티팩트로 올리고
+#  2) "app-dev" 프리릴리스에 bus-alert.apk 로 덮어써서
+#     폰에서 고정 링크로 바로 받을 수 있게 한다:
+#     https://github.com/etaeho/bus_noti_alert/releases/download/app-dev/bus-alert.apk
+# (Expo 계정 불필요 - GitHub Actions 에서 직접 Gradle 빌드)
+
+on:
+  push:
+    paths:
+      - 'bus-alert-app/**'
+      - '.github/workflows/app_android_apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bus-alert-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: bus-alert-app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: bus-alert-app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: 타입 검사 · 테스트
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Android 네이티브 프로젝트 생성 (expo prebuild)
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - name: Release APK 빌드
+        run: |
+          export EXPO_PUBLIC_BUILD_INFO="빌드 #${GITHUB_RUN_NUMBER} · ${GITHUB_REF_NAME} · ${GITHUB_SHA::7}"
+          cd android
+          chmod +x gradlew
+          # 최신 폰(arm64)용만 빌드해서 시간 단축
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+          cp app/build/outputs/apk/release/app-release.apk ../bus-alert.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bus-alert-${{ github.run_number }}
+          path: bus-alert-app/bus-alert.apk
+
+      - name: '"app-dev" 프리릴리스에 게시'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="브랜치: ${GITHUB_REF_NAME}
+          커밋: ${GITHUB_SHA::7} — $(git log -1 --pretty=%s)
+          빌드 #${GITHUB_RUN_NUMBER}
+
+          폰에서 아래 링크로 설치:
+          https://github.com/${GITHUB_REPOSITORY}/releases/download/app-dev/bus-alert.apk"
+          gh release delete app-dev --yes --cleanup-tag || true
+          gh release create app-dev bus-alert.apk \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "버스 알리미 개발 빌드 #${GITHUB_RUN_NUMBER} (${GITHUB_REF_NAME})" \
+            --notes "$NOTES"
+          {
+            echo "## 📱 버스 알리미 APK"
+            echo ""
+            echo "- 설치 링크: https://github.com/${GITHUB_REPOSITORY}/releases/download/app-dev/bus-alert.apk"
+            echo "- 커밋: ${GITHUB_SHA::7} — $(git log -1 --pretty=%s)"
+          } >> "$GITHUB_STEP_SUMMARY"

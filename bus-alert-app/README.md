@@ -50,17 +50,9 @@ npx expo run:android   # 또는 npx expo run:ios (macOS + Xcode)
 ```
 
 > 백그라운드 위치·작업 매니저 같은 네이티브 모듈을 쓰기 때문에 **Expo Go에서는 백그라운드 알림이 동작하지 않습니다.**
-> 위처럼 개발 빌드를 쓰거나 EAS로 빌드하세요.
+> 위처럼 개발 빌드를 쓰거나, 아래 "폰에서 바로 테스트하기"의 APK를 설치하세요.
 
-### 3. EAS 클라우드 빌드 (Android Studio·Xcode 없이)
-
-```bash
-npx eas-cli@latest login
-npx eas-cli@latest build --profile preview --platform android   # 설치용 APK
-npx eas-cli@latest build --profile production --platform ios     # TestFlight/App Store
-```
-
-### 4. 앱 첫 설정
+### 3. 앱 첫 설정
 
 1. **설정**에서 공공데이터 API 키를 입력하고 저장합니다.
 2. **권한 확인 / 요청**에서 알림 권한과 위치 권한을 **"항상 허용"** 으로 허용합니다.
@@ -68,26 +60,18 @@ npx eas-cli@latest build --profile production --platform ios     # TestFlight/Ap
 3. 홈에서 **＋ 추가**를 누르고 정류장 번호 입력 → **정류장 확인** → 노선 선택 → 시간·요일·알림 방식을 정한 뒤 저장합니다.
 4. **테스트 알림**으로 연동을 확인합니다.
 
-## 📲 폰에서 바로 테스트하기 (푸시 → 자동 배포)
+## 📲 폰에서 바로 테스트하기 (푸시 → APK 자동 빌드)
 
-`bus-alert-app/`을 수정해서 푸시하면 GitHub Actions(`.github/workflows/app_preview.yml`)가 자동으로 Android에 배포합니다.
+`bus-alert-app/`을 수정해서 아무 브랜치에나 푸시하면 GitHub Actions(`.github/workflows/app_android_apk.yml`)가 Release APK를 빌드합니다. Expo 계정은 필요 없습니다.
+빌드된 APK는 항상 같은 링크에 덮어써집니다.
 
-| 변경 내용 | 동작 | 폰에 반영 |
-| --- | --- | --- |
-| JS/TS 코드, 화면, 로직 | **OTA 업데이트** (EAS Update) | 2~3분 후 앱을 다시 열면 "새 버전" 알림 → 지금 적용 |
-| 패키지 추가, 권한, `app.json` 네이티브 설정 | **새 APK 빌드** (EAS Build) | 15~30분 후 설치 링크로 다시 설치 |
+**설치 링크:** https://github.com/etaeho/bus_noti_alert/releases/download/app-dev/bus-alert.apk
 
-어느 쪽인지는 네이티브 지문(runtimeVersion `fingerprint` 정책)으로 자동 판단합니다. 설치 링크는 Actions 실행 화면의 **Summary**에 나옵니다.
-
-### 최초 1회 설정
-
-1. https://expo.dev 에 가입합니다(무료).
-2. https://expo.dev/settings/access-tokens 에서 토큰을 만듭니다.
-3. GitHub 저장소 **Settings → Secrets and variables → Actions → New repository secret**에 이름 `EXPO_TOKEN`으로 등록합니다.
-4. Actions 탭에서 워크플로를 실행(Run workflow)하거나 아무 수정이나 푸시합니다. 첫 실행은 EAS 프로젝트를 만들고(`app.json`에 projectId 자동 커밋), 설치용 APK를 빌드합니다.
-5. Summary의 설치 페이지를 폰에서 열어 APK를 설치합니다. "출처를 알 수 없는 앱" 설치를 허용해야 합니다.
-
-이후에는 수정 사항을 푸시하기만 하면 됩니다. 설정 화면의 **앱 버전 → 업데이트 확인**으로 직접 확인할 수도 있습니다.
+- 폰 브라우저로 링크를 열어 설치합니다. 처음 한 번은 "출처를 알 수 없는 앱" 설치를 허용해야 합니다.
+- 서명 키가 항상 같아서 새 APK를 받으면 기존 앱 위에 그대로 업데이트됩니다. 설정과 알림 목록도 유지됩니다.
+- 빌드는 푸시 후 약 10~20분 걸립니다. 진행 상황은 저장소의 Actions 탭에서 볼 수 있습니다.
+- 설치된 버전은 앱의 **설정 → 앱 버전**에서 확인합니다(빌드 번호·커밋). 같은 화면의 **최신 APK 받기** 버튼으로 바로 내려받을 수 있습니다.
+- 최신 64비트(arm64) 폰 전용으로 빌드합니다.
 
 ## 백그라운드 동작 방식
 
@@ -117,7 +101,6 @@ npx eas-cli@latest build --profile production --platform ios     # TestFlight/Ap
 bus-alert-app/
 ├── index.ts                    # 진입점: 백그라운드 태스크 정의 → expo-router
 ├── app.json                    # 권한, 백그라운드 모드, 평문 HTTP 허용(ws.bus.go.kr) 등
-├── eas.json                    # EAS 빌드 프로필
 ├── src/
 │   ├── app/                    # 화면 (Expo Router)
 │   │   ├── _layout.tsx
