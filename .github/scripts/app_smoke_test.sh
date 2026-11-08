@@ -36,7 +36,7 @@ adb logcat -d > "$OUT/logcat.txt"
   echo "--- 크래시 블록 ---"
   grep -n -A 40 -E "FATAL EXCEPTION|Fatal signal|Abort message" "$OUT/logcat.txt" | head -200
   echo "--- JS 로그 ---"
-  grep -E "ReactNativeJS|ReactNative:|unknown:React" "$OUT/logcat.txt" | tail -60
+  grep -E "ReactNativeJS|ReactNative:|unknown:React|BUSALERT_FATAL" "$OUT/logcat.txt" | tail -60
   echo "--- ActivityManager (앱 관련) ---"
   grep -E "ActivityManager.*$PKG|ActivityTaskManager.*$PKG" "$OUT/logcat.txt" | tail -20
 } > "$OUT/errors.txt"
@@ -47,7 +47,7 @@ grep -oE 'text="[^"]+"' "$OUT/ui.xml" 2>/dev/null | head -40 || true
 echo "=== 오류 로그 ==="
 cat "$OUT/errors.txt"
 
-if [ -n "$PID" ] && ! grep -q "FATAL EXCEPTION" "$OUT/logcat.txt" && ! grep -q "Fatal signal" "$OUT/logcat.txt"; then
+if [ -n "$PID" ] && ! grep -q "FATAL EXCEPTION" "$OUT/logcat.txt" && ! grep -q "Fatal signal" "$OUT/logcat.txt" && ! grep -q "BUSALERT_FATAL" "$OUT/logcat.txt"; then
   echo PASS > "$OUT/result"
 fi
 echo "=== 결과: $(cat "$OUT/result") ==="
