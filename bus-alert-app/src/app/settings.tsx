@@ -6,6 +6,7 @@ import { Button, Card, Field, Label, Muted, SectionTitle, ToggleRow, useTheme } 
 import { DEFAULT_SETTINGS, type AppSettings } from '../core/types';
 import { requestLocationPermissions } from '../services/background';
 import { deliver, ensureNotificationPermission } from '../services/notify';
+import { applyUpdateNow, checkAndFetchUpdate, describeCurrentBuild } from '../services/ota';
 import { applyMonitoringChanges, useMonitoringStatus } from '../services/runtime';
 import {
   clearLogs,
@@ -62,6 +63,21 @@ export default function SettingsScreen() {
       );
     } else {
       Alert.alert('권한 확인', '모든 권한이 허용되어 있습니다.');
+    }
+  };
+
+  const checkUpdate = async () => {
+    const r = await checkAndFetchUpdate();
+    if (r === 'downloaded') {
+      Alert.alert('새 버전 다운로드 완료', '지금 적용할까요?', [
+        { text: '나중에', style: 'cancel' },
+        { text: '지금 적용', onPress: () => void applyUpdateNow() },
+      ]);
+    } else {
+      Alert.alert(
+        '업데이트 확인',
+        r === 'none' ? '최신 버전입니다.' : r === 'disabled' ? '개발 모드에서는 업데이트를 사용하지 않습니다.' : '업데이트 확인에 실패했습니다.',
+      );
     }
   };
 
@@ -137,6 +153,12 @@ export default function SettingsScreen() {
         </Card>
 
         <Button title={saved ? '저장됨 ✓' : '저장'} onPress={save} />
+
+        <SectionTitle>앱 버전</SectionTitle>
+        <Card>
+          <Muted>{describeCurrentBuild()}</Muted>
+          <Button title="업데이트 확인" variant="secondary" onPress={checkUpdate} style={{ marginTop: 10 }} />
+        </Card>
 
         <SectionTitle>활동 기록</SectionTitle>
         <Card>

@@ -68,6 +68,27 @@ npx eas-cli@latest build --profile production --platform ios     # TestFlight/Ap
 3. 홈에서 **＋ 추가**를 누르고 정류장 번호 입력 → **정류장 확인** → 노선 선택 → 시간·요일·알림 방식을 정한 뒤 저장합니다.
 4. **테스트 알림**으로 연동을 확인합니다.
 
+## 📲 폰에서 바로 테스트하기 (푸시 → 자동 배포)
+
+`bus-alert-app/`을 수정해서 푸시하면 GitHub Actions(`.github/workflows/app_preview.yml`)가 자동으로 Android에 배포합니다.
+
+| 변경 내용 | 동작 | 폰에 반영 |
+| --- | --- | --- |
+| JS/TS 코드, 화면, 로직 | **OTA 업데이트** (EAS Update) | 2~3분 후 앱을 다시 열면 "새 버전" 알림 → 지금 적용 |
+| 패키지 추가, 권한, `app.json` 네이티브 설정 | **새 APK 빌드** (EAS Build) | 15~30분 후 설치 링크로 다시 설치 |
+
+어느 쪽인지는 네이티브 지문(runtimeVersion `fingerprint` 정책)으로 자동 판단합니다. 설치 링크는 Actions 실행 화면의 **Summary**에 나옵니다.
+
+### 최초 1회 설정
+
+1. https://expo.dev 에 가입합니다(무료).
+2. https://expo.dev/settings/access-tokens 에서 토큰을 만듭니다.
+3. GitHub 저장소 **Settings → Secrets and variables → Actions → New repository secret**에 이름 `EXPO_TOKEN`으로 등록합니다.
+4. Actions 탭에서 워크플로를 실행(Run workflow)하거나 아무 수정이나 푸시합니다. 첫 실행은 EAS 프로젝트를 만들고(`app.json`에 projectId 자동 커밋), 설치용 APK를 빌드합니다.
+5. Summary의 설치 페이지를 폰에서 열어 APK를 설치합니다. "출처를 알 수 없는 앱" 설치를 허용해야 합니다.
+
+이후에는 수정 사항을 푸시하기만 하면 됩니다. 설정 화면의 **앱 버전 → 업데이트 확인**으로 직접 확인할 수도 있습니다.
+
 ## 백그라운드 동작 방식
 
 모바일 OS는 앱이 백그라운드에서 1분마다 네트워크를 쓰는 것을 기본적으로 막습니다. 그래서 다음처럼 겹겹이 구성했습니다 (`src/services/background.ts`).

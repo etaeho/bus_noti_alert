@@ -11,7 +11,11 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.busnoti.alertapp",
       "infoPlist": {
-        "UIBackgroundModes": ["location", "fetch", "processing"],
+        "UIBackgroundModes": [
+          "location",
+          "fetch",
+          "processing"
+        ],
         "NSAppTransportSecurity": {
           "NSExceptionDomains": {
             "ws.bus.go.kr": {
@@ -77,6 +81,13 @@
           }
         }
       ]
-    ]
+    ],
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    }
   }
 }

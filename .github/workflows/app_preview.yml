@@ -1,0 +1,151 @@
+name: 버스 알리미 앱 - Android 미리보기 배포
+
+# bus-alert-app/ 이 바뀌어 푸시되면:
+#  - 네이티브 변경(패키지·권한·app.json 등)이 없으면 → EAS Update(OTA)로 몇 분 안에 폰에 반영
+#  - 네이티브 변경이 있거나 아직 설치용 APK가 없으면 → EAS Build로 새 APK 빌드 후 설치 링크 출력
+# 결과 링크는 Actions 실행 화면의 Summary 에 표시된다.
+#
+# 필요 설정: 저장소 Settings → Secrets and variables → Actions → EXPO_TOKEN
+#  (https://expo.dev/settings/access-tokens 에서 발급)
+
+on:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+    paths:
+      - 'bus-alert-app/**'
+      - '.github/workflows/app_preview.yml'
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'OTA 대신 APK 새로 빌드'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: app-preview-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: bus-alert-app
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+    steps:
+      - name: EXPO_TOKEN 확인
+        working-directory: .
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::EXPO_TOKEN 시크릿이 없습니다. https://expo.dev/settings/access-tokens 에서 토큰을 만들고 저장소 Settings → Secrets and variables → Actions 에 EXPO_TOKEN 으로 등록하세요."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: bus-alert-app/package-lock.json
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: 타입 검사 · 테스트
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: EAS 프로젝트 연결 (최초 1회 app.json 에 기록)
+        run: |
+          eas init --non-interactive --force
+          node -e '
+            const fs = require("fs");
+            const c = JSON.parse(fs.readFileSync("app.json", "utf8"));
+            const id = c.expo.extra && c.expo.extra.eas && c.expo.extra.eas.projectId;
+            if (!id) { console.error("projectId 를 찾지 못했습니다"); process.exit(1); }
+            c.expo.updates = { ...(c.expo.updates || {}), url: "https://u.expo.dev/" + id };
+            fs.writeFileSync("app.json", JSON.stringify(c, null, 2) + "\n");
+          '
+          if ! git diff --quiet -- app.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add app.json
+            git commit -m "chore(app): EAS 프로젝트 연결 [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
+      - name: 런타임 버전(네이티브 지문) 계산
+        id: rv
+        run: |
+          RV=$(npx expo-updates runtimeversion:resolve --platform android | tail -n 1 | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).runtimeVersion))')
+          echo "runtime=$RV" >> "$GITHUB_OUTPUT"
+          echo "런타임 버전: $RV"
+
+      - name: 호환 APK 존재 여부 확인
+        id: check
+        run: |
+          eas build:list --platform android --runtime-version "${{ steps.rv.outputs.runtime }}" \
+            --limit 20 --json --non-interactive > builds.json 2>/dev/null || echo '[]' > builds.json
+          FOUND=$(jq -r '[.[] | select(.buildProfile=="preview") | select(.status=="FINISHED" or .status=="IN_PROGRESS" or .status=="IN_QUEUE" or .status=="NEW")] | first // empty | .id' builds.json)
+          if [ "${{ inputs.force_build }}" = "true" ] || [ -z "$FOUND" ]; then
+            echo "need_build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "need_build=false" >> "$GITHUB_OUTPUT"
+            jq -r --arg id "$FOUND" '.[] | select(.id==$id) | "page=https://expo.dev/accounts/\(.app.ownerAccount.name)/projects/\(.app.slug)/builds/\(.id)\napk=\(.artifacts.buildUrl // "")"' builds.json >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: APK 빌드 (네이티브 변경 시)
+        if: steps.check.outputs.need_build == 'true'
+        id: build
+        run: |
+          eas build --platform android --profile preview --non-interactive --wait --json \
+            --message "$(git log -1 --pretty=%s | cut -c1-200)" > build.json
+          jq -r '.[0] | "page=https://expo.dev/accounts/\(.app.ownerAccount.name)/projects/\(.app.slug)/builds/\(.id)\napk=\(.artifacts.buildUrl // "")\nstatus=\(.status)"' build.json >> "$GITHUB_OUTPUT"
+          jq -r '.[0] | "BUILD_STATUS=\(.status)"' build.json
+          jq -e '.[0].status == "FINISHED"' build.json > /dev/null
+
+      - name: OTA 업데이트 배포 (JS 변경)
+        if: steps.check.outputs.need_build == 'false'
+        id: update
+        run: |
+          eas update --branch preview --platform android --non-interactive \
+            --message "$(git log -1 --pretty=%s | cut -c1-200)" --json > update.json
+          cat update.json
+
+      - name: 결과 요약
+        if: always()
+        run: |
+          PAGE="${{ steps.build.outputs.page || steps.check.outputs.page }}"
+          APK="${{ steps.build.outputs.apk || steps.check.outputs.apk }}"
+          {
+            echo "## 📱 버스 알리미 Android 미리보기"
+            echo ""
+            echo "- 커밋: \`$(git log -1 --pretty='%h %s')\`"
+            echo "- 런타임 버전: \`${{ steps.rv.outputs.runtime }}\`"
+            if [ "${{ steps.check.outputs.need_build }}" = "true" ]; then
+              echo "- 방식: **새 APK 빌드** (네이티브 변경 또는 최초 빌드)"
+            else
+              echo "- 방식: **OTA 업데이트** — 설치된 앱을 다시 열면 '새 버전' 알림이 뜹니다"
+            fi
+            [ -n "$APK" ] && echo "- APK 직접 다운로드: $APK"
+            [ -n "$PAGE" ] && echo "- 설치 페이지 (폰에서 열어 Install): $PAGE"
+            echo ""
+            echo "INSTALL_PAGE=$PAGE"
+            echo "APK_URL=$APK"
+          } | tee -a "$GITHUB_STEP_SUMMARY"

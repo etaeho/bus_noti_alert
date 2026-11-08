@@ -2,10 +2,12 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { useTheme } from '../components/ui';
+import { useOtaUpdates } from '../services/ota';
 import { useMonitorRuntime } from '../services/runtime';
 
 export default function RootLayout() {
   useMonitorRuntime();
+  useOtaUpdates();
   const t = useTheme();
   return (
     <>
