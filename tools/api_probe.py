@@ -16,7 +16,7 @@ SECRETS = {s for s in [RAW, KEY, urllib.parse.quote(KEY, safe=""), urllib.parse.
 CITY = "25"
 STOP_NO = "11690"
 NAME = "명석고"
-CANDIDATE_NODE_IDS = ["DJB8001610", "DJB8001611", "DJB8001612"]
+CANDIDATE_NODE_IDS = ["DJB8001611", "DJB8001612"]
 
 
 def clean(text: str) -> str:
@@ -25,29 +25,45 @@ def clean(text: str) -> str:
     return text
 
 
-def call(name: str, url: str, params: dict) -> list:
-    print(f"\n{'=' * 70}\n▶ {name}\n   {url.split('/')[-2]}/{url.split('/')[-1]}  params={ {k: v for k, v in params.items()} }")
+def call(name: str, url: str, params: dict, quiet: bool = False) -> list:
+    import time
+    for attempt in range(3):
+        items, code = _call(name, url, params, quiet)
+        if code != "99":
+            return items
+        print("   (resultCode 99 → 2초 후 재시도)")
+        time.sleep(2)
+    return items
+
+
+def _call(name: str, url: str, params: dict, quiet: bool):
+    if not quiet:
+        print(f"\n{'=' * 70}\n▶ {name}\n   {url.split('/')[-2]}/{url.split('/')[-1]}  params={ {k: v for k, v in params.items()} }")
     try:
         r = requests.get(url, params={"serviceKey": KEY, "_type": "json", **params}, timeout=15)
         body = r.text.strip()
-        print(f"   HTTP {r.status_code}, {len(body)} bytes")
+        if not quiet:
+            print(f"   HTTP {r.status_code}, {len(body)} bytes")
         if not body.startswith("{"):
             print("   (JSON 아님) " + clean(body[:400]))
-            return []
+            return [], 
         data = r.json()
         header = data.get("response", {}).get("header", {})
-        print(f"   resultCode={header.get('resultCode')} resultMsg={header.get('resultMsg')}")
-        items = data.get("response", {}).get("body", {}).get("items") or {}
+        code = str(header.get("resultCode"))
+        if not quiet or code not in ("00", "0"):
+            print(f"   resultCode={code} resultMsg={header.get('resultMsg')}")
+        items = (data.get("response", {}).get("body") or {}).get("items") or {}
         item = items.get("item", []) if isinstance(items, dict) else []
         if isinstance(item, dict):
             item = [item]
-        print(f"   items: {len(item)}개")
-        for it in item[:25]:
-            print("   - " + json.dumps(it, ensure_ascii=False))
-        return item
+        if not quiet:
+            print(f"   items: {len(item)}개")
+            for it in item[:25]:
+                print("   - " + json.dumps(it, ensure_ascii=False))
+        return item, code
     except Exception as e:  # noqa: BLE001
         print("   오류: " + clean(str(e))[:300])
-        return []
+        return [], ""
 
 
 def main() -> None:
@@ -62,11 +78,18 @@ def main() -> None:
     for nid in CANDIDATE_NODE_IDS:
         nodes.setdefault(nid, {"nodeid": nid})
 
-    # 2) 좌표 주변 정류소
+    # 2) 좌표 주변 정류소 + 각 정류소 도착정보 (다음 정류장 판별용)
     any_gps = next((i for i in nodes.values() if i.get("gpslati")), None)
+    neighbors = []
     if any_gps:
-        call("좌표 주변 정류소", f"{T}/BusSttnInfoInqireService/getCrdntPrxmtSttnList",
-             {"gpsLati": any_gps["gpslati"], "gpsLong": any_gps["gpslong"], "numOfRows": 20})
+        neighbors = call("좌표 주변 정류소", f"{T}/BusSttnInfoInqireService/getCrdntPrxmtSttnList",
+                         {"gpsLati": any_gps["gpslati"], "gpsLong": any_gps["gpslong"], "numOfRows": 20})
+    print(f"\n{'=' * 70}\n▶ 주변 정류소별 도착정보 (노선:남은정거장/초)")
+    for n in neighbors:
+        arr = call("", f"{T}/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList",
+                   {"cityCode": CITY, "nodeId": n["nodeid"], "numOfRows": 40}, quiet=True)
+        summary = " ".join(sorted(f"{a.get('routeno')}:{a.get('arrprevstationcnt')}/{a.get('arrtime')}" for a in arr))
+        print(f"   {n.get('nodenm')} {n.get('nodeno', '')} [{n['nodeid']}] ({n.get('gpslati')},{n.get('gpslong')}) → {summary}")
 
     route_ids = {}
     for nid, info in nodes.items():
