@@ -6,6 +6,7 @@
  */
 import { XMLParser } from 'fast-xml-parser';
 
+import { distanceM } from './decide';
 import { estimateTravelDirection, findPairStop } from './geoDirection';
 
 import {
@@ -109,7 +110,7 @@ export function parseTagoResponse(text: string): Item[] {
     const data = JSON.parse(t);
     const header = data?.response?.header;
     if (header?.resultCode && !['00', '0', '0000'].includes(String(header.resultCode))) {
-      throw new BusApiError(`API 오류: ${header.resultMsg ?? header.resultCode}`);
+      throw new BusApiError(`API 오류(${header.resultCode}): ${header.resultMsg ?? ''}`);
     }
     const items = data?.response?.body?.items;
     if (!items) return [];
@@ -123,6 +124,25 @@ export function parseTagoResponse(text: string): Item[] {
   }
   const items = findDeep(root, 'items') as Record<string, unknown> | undefined;
   return items && typeof items === 'object' ? asArray(items.item as Item | Item[]) : [];
+}
+
+/**
+ * TAGO 호출 + 파싱. 서버가 동시 접속 한도로 resultCode 99(가용한 세션이 존재하지 않습니다)를
+ * 돌려주면 잠시 후 최대 2번 다시 시도한다.
+ */
+async function tagoItems(url: string): Promise<Item[]> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return parseTagoResponse(await httpGet(url));
+    } catch (e) {
+      const msg = (e as Error).message ?? '';
+      if (attempt < 2 && /\(99\)|세션/.test(msg)) {
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        continue;
+      }
+      throw e;
+    }
+  }
 }
 
 function tagoCityCode(q: ArrivalQuery, override?: string): string {
@@ -140,7 +160,7 @@ async function lookupTagoStop(key: string, cityCode: string, stopNo: string): Pr
     pageNo: 1,
     _type: 'json',
   });
-  const items = parseTagoResponse(await httpGet(url));
+  const items = await tagoItems(url);
   for (const it of items) {
     if (str(it.nodeno) === stopNo) {
       return {
@@ -165,7 +185,8 @@ async function resolveTagoNodeId(key: string, cityCode: string, q: ArrivalQuery)
     // 정류소정보 API 미신청 등 - 아래 폴백
   }
   if (cityCode === '25' && q.stopNo === '51630') return 'DJB8001611';
-  if (cityCode === '25' && q.stopNo === '11690') return 'DJB8001610';
+  // 실제 조회 결과: 11690 = DJB8001612, 51630 = DJB8001611 (DJB8001610 은 면허시험장)
+  if (cityCode === '25' && q.stopNo === '11690') return 'DJB8001612';
   throw new BusApiError(
     `[TAGO] 도시코드 ${cityCode}에서 정류소 번호 ${q.stopNo}의 nodeId를 찾지 못했습니다. ` +
       "공공데이터포털 '국토교통부_(TAGO)_버스정류소정보' 활용신청 여부를 확인해 주세요.",
@@ -183,7 +204,7 @@ async function fetchTagoArrivals(key: string, q: ArrivalQuery, cityOverride?: st
     pageNo: 1,
     _type: 'json',
   });
-  const items = parseTagoResponse(await httpGet(url));
+  const items = await tagoItems(url);
   const want = new Set(q.routes.map((r) => r.toUpperCase()));
   const out: UnifiedArrival[] = [];
   for (const it of items) {
@@ -564,10 +585,8 @@ export async function searchStopsByName(
   }
 
   const city = cityCode || TAGO_CITY_CODES[region] || '25';
-  const items = parseTagoResponse(
-    await httpGet(
+  const items = await tagoItems(
       buildUrl(TAGO_STOP_SEARCH_URL, { serviceKey: key, cityCode: city, nodeNm: q, numOfRows: 40, pageNo: 1, _type: 'json' }),
-    ),
   );
   return items.map((it) => tagoStop(it, region, city));
 }
@@ -606,10 +625,8 @@ export async function nearbyStops(
   }
 
   // TAGO: 도시코드 없이 좌표만으로 조회되며, 결과에 도시코드가 포함된다
-  const items = parseTagoResponse(
-    await httpGet(
+  const items = await tagoItems(
       buildUrl(TAGO_NEARBY_URL, { serviceKey: key, gpsLati: latitude, gpsLong: longitude, numOfRows: 40, pageNo: 1, _type: 'json' }),
-    ),
   );
   return items.map((it) => {
     const city = str(it.citycode, TAGO_CITY_CODES[region] || '');
@@ -660,23 +677,19 @@ export async function stopDirection(
   let routeItems: Item[] = [];
   let note = '';
   try {
-    routeItems = parseTagoResponse(
-      await httpGet(
+    routeItems = await tagoItems(
         buildUrl(TAGO_STOP_ROUTES_URL, { serviceKey: key, cityCode: city, nodeid: stop.stationId, numOfRows: 60, pageNo: 1, _type: 'json' }),
-      ),
     );
   } catch (e) {
     note = apiNote(e, '버스정류소정보');
   }
   const routes = [...new Set(routeItems.map((it) => str(it.routeno)).filter(Boolean))].sort(routeSort);
   // 앞쪽 노선 몇 개로 다음 정류장을 찾는다 (회차 지점 등 예외 대비)
-  for (const r of routeItems.slice(0, 3)) {
+  for (const r of routeApiUnavailable ? [] : routeItems.slice(0, 3)) {
     try {
-      const stops = parseTagoResponse(
-        await httpGet(
+      const stops = (await tagoItems(
           buildUrl(TAGO_ROUTE_STOPS_URL, { serviceKey: key, cityCode: city, routeId: str(r.routeid), numOfRows: 500, pageNo: 1, _type: 'json' }),
-        ),
-      ).sort((a, b) => Number(a.nodeord) - Number(b.nodeord));
+      )).sort((a, b) => Number(a.nodeord) - Number(b.nodeord));
       const idx = stops.findIndex((s) => str(s.nodeid) === stop.stationId);
       const next = idx >= 0 ? stops[idx + 1] : undefined;
       if (next) {
@@ -690,7 +703,27 @@ export async function stopDirection(
       }
     } catch (e) {
       note = apiNote(e, '버스노선정보');
+      // 미신청(403 등)이면 이번 실행 동안은 다시 부르지 않는다
+      if (/활용신청/.test(note)) {
+        routeApiUnavailable = true;
+        break;
+      }
     }
+  }
+  // 노선정보 없이: 주변 정류장 도착정보로 다음 정류장 찾기
+  try {
+    const next = await nextStopByArrivals(key, city, stop, neighbors);
+    if (next) {
+      return {
+        label: `${next.stopName} 방면`,
+        nextStopName: next.stopName,
+        nextLatitude: next.latitude,
+        nextLongitude: next.longitude,
+        routes,
+      };
+    }
+  } catch {
+    // 아래 추정으로
   }
   // 노선정보로 못 찾으면 길 건너편 정류장 위치로 추정
   const est = await estimateFromNeighbors(key, stop, neighbors);
@@ -700,10 +733,88 @@ export async function stopDirection(
 
 function apiNote(e: unknown, apiName: string): string {
   const msg = (e as Error)?.message ?? '';
-  if (/SERVICE_KEY|NOT_REGISTERED|인증|SERVICE ERROR|ACCESS DENIED|LIMITED/i.test(msg)) {
+  if (/SERVICE_KEY|NOT_REGISTERED|인증|SERVICE ERROR|ACCESS DENIED|LIMITED|HTTP 403|Forbidden/i.test(msg)) {
     return `방면 확인에는 공공데이터포털 'TAGO ${apiName}' 활용신청이 필요합니다`;
   }
   return `방면 조회 실패: ${msg.slice(0, 60)}`;
+}
+
+let routeApiUnavailable = false;
+
+/** 노선별 가장 가까운 버스의 남은 정거장 수·시간 */
+export type RouteCounts = Record<string, { cnt: number; sec: number }>;
+
+const arrivalMemo = new Map<string, { at: number; counts: RouteCounts }>();
+
+async function tagoRouteCounts(key: string, city: string, nodeId: string): Promise<RouteCounts> {
+  const memo = arrivalMemo.get(`${city}:${nodeId}`);
+  if (memo && Date.now() - memo.at < 60_000) return memo.counts;
+  const items = await tagoItems(
+    buildUrl(TAGO_ARRIVAL_ALL_URL, { serviceKey: key, cityCode: city, nodeId, numOfRows: 60, pageNo: 1, _type: 'json' }),
+  );
+  const counts: RouteCounts = {};
+  for (const it of items) {
+    const r = str(it.routeno);
+    const cnt = Number(it.arrprevstationcnt);
+    const sec = Number(it.arrtime);
+    if (!r || !Number.isFinite(cnt) || !Number.isFinite(sec)) continue;
+    if (!counts[r] || cnt < counts[r].cnt) counts[r] = { cnt, sec };
+  }
+  arrivalMemo.set(`${city}:${nodeId}`, { at: Date.now(), counts });
+  return counts;
+}
+
+/**
+ * 다음 정류장 판별 (순수 함수)
+ * 같은 노선 버스가 이 정류장에서 N정거장 전이고 이웃 정류장에서 N+1정거장 전(그리고 더 늦게 도착)이면
+ * 그 이웃은 이 정류장 바로 다음 정류장이다. 노선별로 투표해 가장 많이 맞는 이웃을 고른다.
+ */
+export function pickNextStop<T>(
+  self: RouteCounts,
+  neighbors: { stop: T; counts: RouteCounts }[],
+): { stop: T; votes: number } | null {
+  let best: { stop: T; votes: number } | null = null;
+  for (const n of neighbors) {
+    let next = 0;
+    let prev = 0;
+    for (const [route, s] of Object.entries(self)) {
+      const o = n.counts[route];
+      if (!o) continue;
+      if (o.cnt === s.cnt + 1 && o.sec >= s.sec) next++;
+      else if (o.cnt === s.cnt - 1 && o.sec <= s.sec) prev++;
+    }
+    if (next >= 2 && next > prev && (!best || next > best.votes)) best = { stop: n.stop, votes: next };
+  }
+  return best;
+}
+
+async function nextStopByArrivals(
+  key: string,
+  city: string,
+  stop: StopCandidate,
+  neighbors?: StopCandidate[],
+): Promise<StopCandidate | null> {
+  if (!stop.stationId || stop.latitude == null || stop.longitude == null) return null;
+  const self = await tagoRouteCounts(key, city, stop.stationId);
+  if (Object.keys(self).length < 2) return null; // 운행 중인 버스가 거의 없으면 판별 불가
+  let list = neighbors?.length ? neighbors : await nearbyStops(key, stop.region, stop.latitude, stop.longitude);
+  if (neighbors?.length && list.length < 4) list = await nearbyStops(key, stop.region, stop.latitude, stop.longitude);
+  const near = list
+    .filter((n) => n.stationId && n.stationId !== stop.stationId && n.latitude != null && n.longitude != null)
+    .map((n) => ({ n, d: distanceM(stop.latitude!, stop.longitude!, n.latitude!, n.longitude!) }))
+    .filter((x) => x.d < 900)
+    .sort((a, b) => a.d - b.d)
+    .slice(0, 8)
+    .map((x) => x.n);
+  const withCounts: { stop: StopCandidate; counts: RouteCounts }[] = [];
+  for (const n of near) {
+    try {
+      withCounts.push({ stop: n, counts: await tagoRouteCounts(key, n.cityCode || city, n.stationId) });
+    } catch {
+      // 한 곳 실패는 무시
+    }
+  }
+  return pickNextStop(self, withCounts)?.stop ?? null;
 }
 
 async function estimateFromNeighbors(

@@ -175,3 +175,45 @@ describe('방면 추정 (우측통행)', () => {
     assert.deepEqual(d.routes, ['311']);
   });
 });
+
+import { pickNextStop, type RouteCounts } from '../src/core/busApi';
+
+// 2026-11-09 실제 조회값 (tools/api_probe.py, 대전 TAGO) "노선:남은정거장/초"
+function parse(s: string): RouteCounts {
+  const out: RouteCounts = {};
+  for (const p of s.trim().split(/\s+/)) {
+    const [r, rest] = p.split(':');
+    const [cnt, sec] = rest.split('/').map(Number);
+    out[r] = { cnt, sec };
+  }
+  return out;
+}
+const REAL = {
+  '11690': parse('103:4/369 105:2/1346 106:1/37 311:3/168 613:3/145 620:11/1354 66:4/1410'),
+  '51630': parse('103:4/335 105:2/126 106:7/626 311:1/39 613:2/126 620:3/256 66:9/775'),
+  '길치근린공원네거리53510': parse('66:9/715'),
+  '평화아파트53530': parse('66:9/1400'),
+  '길치근린공원51640': parse('103:5/416 105:3/207 106:8/707 311:2/120 613:3/207 620:4/337 66:10/856'),
+  '평화아파트11620': parse('105:1/1346 66:8/607'),
+  '길치근린공원51620': parse('103:3/313 106:3/1350 311:2/112 613:2/89 620:10/1354 66:3/1410'),
+  '한국폴리텍대학11650': parse('103:3/271 105:1/62 106:6/562 311:5/503 613:1/62 620:2/192 66:8/711'),
+  '한국폴리텍대학11640': parse('103:5/448 105:3/1346 106:2/116 311:1/48 613:4/224 620:12/1354 66:5/1410'),
+};
+
+describe('도착정보로 다음 정류장 찾기 (명석고 실제 데이터)', () => {
+  const others = (self: string) =>
+    Object.entries(REAL)
+      .filter(([k]) => k !== self && k !== (self === '11690' ? '51630' : '11690'))
+      .map(([k, counts]) => ({ stop: k, counts }));
+  it('명석고 11690 → 한국폴리텍대학 방면', () => {
+    assert.equal(pickNextStop(REAL['11690'], others('11690'))?.stop, '한국폴리텍대학11640');
+  });
+  it('명석고 51630 → 길치근린공원 방면', () => {
+    assert.equal(pickNextStop(REAL['51630'], others('51630'))?.stop, '길치근린공원51640');
+  });
+  it('맞은편 정류장까지 섞여 있어도 같은 결과', () => {
+    const all = (self: string) => Object.entries(REAL).filter(([k]) => k !== self).map(([k, counts]) => ({ stop: k, counts }));
+    assert.equal(pickNextStop(REAL['11690'], all('11690'))?.stop, '한국폴리텍대학11640');
+    assert.equal(pickNextStop(REAL['51630'], all('51630'))?.stop, '길치근린공원51640');
+  });
+});

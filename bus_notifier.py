@@ -215,7 +215,8 @@ def resolve_tago_node_id(service_key: str, city_code: str, target: WatchTarget) 
         if target.stop_no == "51630":
             target.station_id = "DJB8001611"
             return "DJB8001611"
-        for candidate_id in ("DJB8001610", "DJB8001612", "DJB8001611"):
+        # 실제 조회 결과: 11690 = DJB8001612, 51630 = DJB8001611 (DJB8001610 은 '면허시험장')
+        for candidate_id in ("DJB8001612", "DJB8001611"):
             try:
                 probe_params = {
                     "serviceKey": service_key,
@@ -239,9 +240,9 @@ def resolve_tago_node_id(service_key: str, city_code: str, target: WatchTarget) 
             except Exception:
                 continue
         # 심야/운행종료 시간대라 도착 예정 버스가 0대여서 probe_items가 비어있는 경우 기본값 지정
-        target.station_id = "DJB8001610"
-        print("[INFO][TAGO] 명석고(11690) 기본 표준 ID(DJB8001610) 사용")
-        return "DJB8001610"
+        target.station_id = "DJB8001612"
+        print("[INFO][TAGO] 명석고(11690) 기본 표준 ID(DJB8001612) 사용")
+        return "DJB8001612"
 
     raise RuntimeError(
         f"[TAGO] 도시코드 {city_code}에서 정류소 번호 {target.stop_no}의 nodeId를 찾지 못했습니다. "
