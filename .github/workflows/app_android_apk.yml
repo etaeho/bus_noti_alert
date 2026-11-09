@@ -53,6 +53,16 @@ jobs:
           # 기본 브랜치가 아니어도 캐시를 저장해서 다음 빌드를 빠르게
           cache-read-only: false
 
+      - name: Google 지도 키 확인
+        run: |
+          if [ -n "$GOOGLE_MAPS_API_KEY" ]; then
+            echo "✅ GOOGLE_MAPS_API_KEY 등록됨 (${#GOOGLE_MAPS_API_KEY}자) → Google 지도로 빌드합니다"
+            echo "- 🗺️ 지도: Google 지도" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::GOOGLE_MAPS_API_KEY 가 없어 기본 지도(OpenStreetMap/CARTO)로 빌드합니다"
+            echo "- 🗺️ 지도: 기본 지도 (GOOGLE_MAPS_API_KEY 미등록)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: 의존성 설치
         run: npm ci
 
