@@ -215,4 +215,6 @@ export interface StopDirection {
   estimated?: boolean;
   /** 노선별 방면 (노선번호 → "○○ 방면") */
   routeDirections?: Record<string, string>;
+  /** 노선별 기점 ↔ 종점 (방면을 모를 때 표시) */
+  routeEnds?: Record<string, string>;
 }

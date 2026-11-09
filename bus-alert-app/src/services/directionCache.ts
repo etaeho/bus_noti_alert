@@ -69,7 +69,14 @@ async function doResolve(
       await updateSavedDirection(key, d.label).catch(() => {});
       return d;
     }
-    if (cached) return { ...cached, routes: d.routes.length ? d.routes : cached.routes, note: undefined };
+    if (cached) {
+      return {
+        ...cached,
+        routes: d.routes.length ? d.routes : cached.routes,
+        routeEnds: d.routeEnds ?? cached.routeEnds,
+        note: undefined,
+      };
+    }
     return d;
   } catch (e) {
     if (cached) return cached;

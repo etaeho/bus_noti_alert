@@ -108,8 +108,6 @@ export default function StopViewScreen() {
         <Text style={[styles.name, { color: t.text }]}>🚏 {stop.stopName}</Text>
         {dirLabel ? (
           <Text style={{ color: t.primary, fontWeight: '800', marginTop: 4 }}>→ {dirLabel}</Text>
-        ) : direction?.note ? (
-          <Muted style={{ marginTop: 4 }}>{direction.note}</Muted>
         ) : null}
         <View style={styles.pills}>
           <Pill text={REGION_LABELS[stop.region]} icon="location" />

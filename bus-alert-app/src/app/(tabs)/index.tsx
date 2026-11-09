@@ -36,9 +36,10 @@ function formatDist(m?: number): string {
 
 function dirText(d: DirState | undefined): { text: string; muted: boolean } {
   if (d === undefined || d === 'loading') return { text: '방면 확인 중…', muted: true };
-  if (d === 'error') return { text: '방면 정보 없음', muted: true };
+  if (d === 'error') return { text: '', muted: true };
   if (d.label) return { text: `→ ${d.label}`, muted: false };
-  return { text: d.note || '방면 정보 없음', muted: true };
+  // 방면을 모르면 지나는 노선만
+  return { text: d.routes.length ? `${d.routes.slice(0, 8).join(' · ')}번` : '', muted: true };
 }
 
 export default function StopsScreen() {
@@ -199,9 +200,11 @@ export default function StopsScreen() {
                       <Text style={{ color: t.text, fontWeight: '800', fontSize: 15.5 }} numberOfLines={1}>
                         {s.stopName}
                       </Text>
-                      <Text style={{ color: d.muted ? t.sub : t.primary, fontWeight: d.muted ? '500' : '700', fontSize: 13 }} numberOfLines={1}>
-                        {d.text}
-                      </Text>
+                      {d.text ? (
+                        <Text style={{ color: d.muted ? t.sub : t.primary, fontWeight: d.muted ? '500' : '700', fontSize: 13 }} numberOfLines={1}>
+                          {d.text}
+                        </Text>
+                      ) : null}
                     </View>
                     <Pressable onPress={() => toggleNearbyFav(s)} hitSlop={12} style={{ paddingHorizontal: 6 }} accessibilityLabel="즐겨찾기">
                       <Icon name={on ? 'star' : 'star-outline'} size={24} color={on ? '#F5B301' : t.sub} />

@@ -699,6 +699,12 @@ export async function stopDirection(
     note = apiNote(e, '버스정류소정보');
   }
   const routes = [...new Set(routeItems.map((it) => str(it.routeno)).filter(Boolean))].sort(routeSort);
+  const routeEnds: Record<string, string> = {};
+  for (const it of routeItems) {
+    const a = str(it.startnodenm);
+    const b = str(it.endnodenm);
+    if (str(it.routeno) && (a || b)) routeEnds[str(it.routeno)] = [a, b].filter(Boolean).join(' ↔ ');
+  }
   // 앞쪽 노선 몇 개로 다음 정류장을 찾는다 (회차 지점 등 예외 대비)
   for (const r of routeApiUnavailable ? [] : routeItems.slice(0, 3)) {
     try {
@@ -714,6 +720,7 @@ export async function stopDirection(
           nextLatitude: num(next.gpslati),
           nextLongitude: num(next.gpslong),
           routes,
+          routeEnds,
         };
       }
     } catch (e) {
@@ -741,20 +748,17 @@ export async function stopDirection(
         nextLongitude: next.longitude,
         routes,
         routeDirections,
+        routeEnds,
       };
     }
     if (Object.keys(routeDirections).length) {
-      return { label: '', routes, routeDirections, note: '노선별 방면만 확인되었습니다' };
+      return { label: '', routes, routeDirections, routeEnds };
     }
   } catch {
     // 아래 추정으로
   }
   // 위치만으로 추정하면 정류장이 길을 따라 어긋나 있을 때 틀리므로(예: 명석고 11690) 쓰지 않는다.
-  return {
-    label: '',
-    routes,
-    note: note && !/활용신청/.test(note) ? note : '지금 운행 중인 버스 정보로는 방면을 판별하지 못했습니다',
-  };
+  return { label: '', routes, routeEnds };
 }
 
 function apiNote(e: unknown, apiName: string): string {

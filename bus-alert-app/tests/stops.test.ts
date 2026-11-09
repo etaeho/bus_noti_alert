@@ -162,7 +162,8 @@ describe('방면 추정 (우측통행)', () => {
       '<OpenAPI_ServiceResponse><cmmMsgHeader><errMsg>SERVICE ERROR</errMsg><returnAuthMsg>SERVICE_KEY_IS_NOT_REGISTERED_ERROR</returnAuthMsg></cmmMsgHeader></OpenAPI_ServiceResponse>';
     globalThis.fetch = (async (input: string | URL | Request) => {
       const url = String(input);
-      if (url.includes('getSttnThrghRouteList')) return new Response(JSON.stringify(tago([{ routeid: 'R1', routeno: '311' }])));
+      if (url.includes('getSttnThrghRouteList'))
+        return new Response(JSON.stringify(tago([{ routeid: 'R1', routeno: '311', startnodenm: '신대차고지', endnodenm: '오월드기점지' }])));
       if (url.includes('getRouteAcctoThrghSttnList')) return new Response(authErr);
       return new Response('x', { status: 404 });
     }) as typeof fetch;
@@ -170,8 +171,9 @@ describe('방면 추정 (우측통행)', () => {
     const west = { ...base, stationId: 'W', latitude: 36.31, longitude: 127.36 };
     const d = await stopDirection('KEY', east, [east, west]);
     assert.equal(d.label, '');
-    assert.ok(d.note);
+    assert.equal(d.note, undefined);
     assert.deepEqual(d.routes, ['311']);
+    assert.equal(d.routeEnds?.['311'], '신대차고지 ↔ 오월드기점지');
   });
 });
 

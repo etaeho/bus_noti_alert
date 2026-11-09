@@ -224,15 +224,11 @@ export default function StopPickerScreen() {
             {favKeys.has(stopKeyOf(item)) ? '⭐ ' : '🚏 '}
             {item.stopName}
           </Text>
-          <Text style={{ color: t.primary, fontWeight: '700', marginTop: 2 }}>
-            {d === 'loading' || d === undefined
-              ? '방면 확인 중…'
-              : d === 'error'
-                ? '방면 정보 없음 (지도 위치로 확인)'
-                : d.label
-                  ? `→ ${d.label}`
-                  : d.note || '방면 정보 없음 (지도 위치로 확인)'}
-          </Text>
+          {d === 'loading' || d === undefined ? (
+            <Text style={{ color: t.sub, marginTop: 2 }}>방면 확인 중…</Text>
+          ) : d !== 'error' && d.label ? (
+            <Text style={{ color: t.primary, fontWeight: '700', marginTop: 2 }}>→ {d.label}</Text>
+          ) : null}
           <Muted>
             {[item.stopNo ? `번호 ${item.stopNo}` : '', formatDist(item.distanceM), REGION_LABELS[item.region]]
               .filter(Boolean)

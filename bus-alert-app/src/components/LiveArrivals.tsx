@@ -203,9 +203,18 @@ export function LiveArrivals({
               </View>
               {(() => {
                 const dirText = first.direction ?? dir?.routeDirections?.[g.routeNo] ?? (dir?.label || '');
-                return dirText ? (
-                  <Text style={{ color: t.primary, fontSize: compact ? 12 : 12.5, fontWeight: '700', marginTop: 1 }} numberOfLines={1}>
-                    → {dirText}
+                if (dirText) {
+                  return (
+                    <Text style={{ color: t.primary, fontSize: compact ? 12 : 12.5, fontWeight: '700', marginTop: 1 }} numberOfLines={1}>
+                      → {dirText}
+                    </Text>
+                  );
+                }
+                // 방면을 모르면 노선의 기점 ↔ 종점
+                const ends = dir?.routeEnds?.[g.routeNo];
+                return ends ? (
+                  <Text style={{ color: t.sub, fontSize: 12, marginTop: 1 }} numberOfLines={1}>
+                    {ends}
                   </Text>
                 ) : null;
               })()}
