@@ -46,7 +46,7 @@ def _call(name: str, url: str, params: dict, quiet: bool):
             print(f"   HTTP {r.status_code}, {len(body)} bytes")
         if not body.startswith("{"):
             print("   (JSON 아님) " + clean(body[:400]))
-            return [], 
+            return [], ""
         data = r.json()
         header = data.get("response", {}).get("header", {})
         code = str(header.get("resultCode"))
