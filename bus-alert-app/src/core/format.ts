@@ -19,6 +19,7 @@ export function formatArrivalMessage(arr: UnifiedArrival, isRepeat = false): { t
     `🚏 남은위치 : ${arr.prevStationCnt}정거장 전`,
     `📍 정류소명 : ${arr.stopName}`,
   ];
+  if (arr.direction) lines.push(`🧭 방면 : ${arr.direction}`);
   if (info.length) lines.push(`💡 부가정보 : ${info.join(' | ')}`);
 
   return {
@@ -42,6 +43,7 @@ export function formatStageMessage(arr: UnifiedArrival, cnt: number): { title: s
     `⏳ 약 ${formatArrSec(arr.arrSec)} 후 도착`,
     `📍 ${arr.stopName}`,
   ];
+  if (arr.direction) lines.push(`🧭 ${arr.direction}`);
   if (arr.vehicleIdOrPlate) lines.push(`🚌 차량번호: ${arr.vehicleIdOrPlate}`);
   return {
     title: cnt <= 0 ? `🚌 ${arr.routeNo}번 곧 도착!` : `🚌 ${arr.routeNo}번 ${cnt}정거장 전`,

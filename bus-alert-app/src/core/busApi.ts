@@ -315,6 +315,7 @@ async function fetchGbisArrivals(key: string, q: ArrivalQuery): Promise<UnifiedA
           vehicleIdOrPlate: plate,
           extraInfo: extra.join(' | '),
           routeType,
+          direction: dest ? `${dest} 방면` : undefined,
         });
       }
     }
@@ -396,6 +397,7 @@ async function fetchSeoulArrivals(key: string, q: ArrivalQuery): Promise<Unified
         vehicleIdOrPlate: plain || str(it[`vehId${n}`]),
         extraInfo: extra.join(' | '),
         routeType,
+        direction: dir ? `${dir} 방면` : str(it.nxtStn) ? `${str(it.nxtStn)} 방면` : undefined,
       });
     }
   }
@@ -652,10 +654,17 @@ export async function stopDirection(
     const nexts = items.map((it) => str(it.nxtStn)).filter(Boolean);
     const next = mostCommon(nexts);
     const dir = mostCommon(items.map((it) => str(it.adirection)).filter(Boolean));
+    const routeDirections: Record<string, string> = {};
+    for (const it of items) {
+      const r = str(it.rtNm) || str(it.busRouteAbrv);
+      const d = str(it.adirection) || str(it.nxtStn);
+      if (r && d) routeDirections[r] = `${d} 방면`;
+    }
     return {
       label: next ? `${next} 방면` : dir ? `${dir} 방향` : '',
       nextStopName: next,
       routes,
+      routeDirections,
     };
   }
 
@@ -666,9 +675,16 @@ export async function stopDirection(
     );
     const routes = [...new Set(items.map((it) => str(it.routeName)).filter(Boolean))];
     const dests = [...new Set(items.map((it) => str(it.routeDestName)).filter(Boolean))];
+    const routeDirections: Record<string, string> = {};
+    for (const it of items) {
+      const r = str(it.routeName);
+      const d = str(it.routeDestName);
+      if (r && d) routeDirections[r] = `${d} 방면`;
+    }
     return {
       label: dests.length ? `${dests.slice(0, 2).join('·')}${dests.length > 2 ? ' 등' : ''} 방면` : '',
       routes,
+      routeDirections,
     };
   }
 
@@ -711,15 +727,24 @@ export async function stopDirection(
   }
   // 노선정보 없이: 주변 정류장 도착정보로 다음 정류장 찾기
   try {
-    const next = await nextStopByArrivals(key, city, stop, neighbors);
+    const found = await nextStopByArrivals(key, city, stop, neighbors);
+    const routeDirections: Record<string, string> = {};
+    for (const [r, n] of Object.entries(found?.routeNext ?? {})) routeDirections[r] = `${n.stopName} 방면`;
+    const next = found?.next;
     if (next) {
+      // 개별 판별이 안 된 노선은 정류장 전체 방면으로
+      for (const r of routes) routeDirections[r] ??= `${next.stopName} 방면`;
       return {
         label: `${next.stopName} 방면`,
         nextStopName: next.stopName,
         nextLatitude: next.latitude,
         nextLongitude: next.longitude,
         routes,
+        routeDirections,
       };
+    }
+    if (Object.keys(routeDirections).length) {
+      return { label: '', routes, routeDirections, note: '노선별 방면만 확인되었습니다' };
     }
   } catch {
     // 아래 추정으로
@@ -799,12 +824,33 @@ async function nearbyStopsMemo(key: string, stop: StopCandidate): Promise<StopCa
   return list;
 }
 
+/**
+ * 노선별 다음 정류장 (순수 함수): 노선 r 의 버스가 이웃 N 에서 정확히 한 정거장 더 멀면 N 이 r 의 다음 정류장.
+ * 여러 곳이 해당하면 정류장 전체 판별 결과(preferred)를 우선, 그다음 목록 순서(가까운 순).
+ */
+export function pickRouteNextStops<T>(
+  self: RouteCounts,
+  neighbors: { stop: T; counts: RouteCounts }[],
+  preferred?: T,
+): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const [route, s] of Object.entries(self)) {
+    const cands = neighbors.filter((n) => {
+      const o = n.counts[route];
+      return o && o.cnt === s.cnt + 1 && o.sec >= s.sec;
+    });
+    if (!cands.length) continue;
+    out[route] = (preferred !== undefined && cands.find((c) => c.stop === preferred)?.stop) || cands[0].stop;
+  }
+  return out;
+}
+
 async function nextStopByArrivals(
   key: string,
   city: string,
   stop: StopCandidate,
   neighbors?: StopCandidate[],
-): Promise<StopCandidate | null> {
+): Promise<{ next: StopCandidate | null; routeNext: Record<string, StopCandidate> } | null> {
   if (!stop.stationId || stop.latitude == null || stop.longitude == null) return null;
   const self = await tagoRouteCounts(key, city, stop.stationId);
   if (Object.keys(self).length < 2) return null; // 운행 중인 버스가 거의 없으면 판별 불가
@@ -834,7 +880,8 @@ async function nextStopByArrivals(
       // 한 곳 실패는 무시
     }
   }
-  return pickNextStop(self, withCounts)?.stop ?? null;
+  const next = pickNextStop(self, withCounts)?.stop ?? null;
+  return { next, routeNext: pickRouteNextStops(self, withCounts, next ?? undefined) };
 }
 
 function mostCommon(values: string[]): string | undefined {

@@ -120,6 +120,8 @@ export interface UnifiedArrival {
   extraInfo: string;
   /** 노선 종류 (간선·지선·광역·마을·좌석·급행·순환·공항 등) */
   routeType?: string;
+  /** 이 버스가 가는 방면 (예: "한국폴리텍대학 방면") */
+  direction?: string;
 }
 
 /** 정류장 조회 결과 */
@@ -211,4 +213,6 @@ export interface StopDirection {
   note?: string;
   /** 방면이 위치로 추정한 값인지 */
   estimated?: boolean;
+  /** 노선별 방면 (노선번호 → "○○ 방면") */
+  routeDirections?: Record<string, string>;
 }

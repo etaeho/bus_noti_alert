@@ -9,7 +9,8 @@ import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from '
 
 import { fetchArrivals, type ArrivalQuery } from '../core/busApi';
 import { routeStyle } from '../core/routeStyle';
-import type { UnifiedArrival } from '../core/types';
+import type { StopCandidate, StopDirection, UnifiedArrival } from '../core/types';
+import { attachDirections, resolveDirection } from '../services/directionCache';
 import { getApiKey } from '../services/storage';
 import { Icon, Muted, useTheme } from './ui';
 
@@ -57,6 +58,16 @@ function group(list: UnifiedArrival[]): RouteGroup[] {
   return [...map.values()];
 }
 
+function stopOf(q: Omit<ArrivalQuery, 'routes'>): StopCandidate {
+  return {
+    region: q.region,
+    stopNo: q.stopNo,
+    stationId: q.stationId ?? '',
+    cityCode: q.cityCode ?? '',
+    stopName: q.stopName ?? '',
+  };
+}
+
 function timeLabel(d: Date): string {
   return d.toLocaleTimeString('ko-KR', { hour12: false });
 }
@@ -77,6 +88,7 @@ export function LiveArrivals({
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [focused, setFocused] = useState(true);
   const seq = useRef(0);
+  const [dir, setDir] = useState<StopDirection | null>(null);
   const key = query ? `${query.region}|${query.stationId}|${query.stopNo}|${query.cityCode ?? ''}` : '';
 
   const load = useCallback(async () => {
@@ -84,7 +96,7 @@ export function LiveArrivals({
     const my = ++seq.current;
     setLoading(true);
     try {
-      const list = await fetchArrivals(await getApiKey(), { ...query, routes: [] });
+      const list = await attachDirections(stopOf(query), await fetchArrivals(await getApiKey(), { ...query, routes: [] }));
       if (my !== seq.current) return;
       setRows(list);
       setError('');
@@ -118,6 +130,17 @@ export function LiveArrivals({
   useEffect(() => {
     setRows(null);
     setError('');
+    setDir(null);
+    if (!query) return;
+    // 버스별 방면 (TAGO 지역은 주변 정류장 도착정보로 판별, 결과는 기기에 저장)
+    let alive = true;
+    void resolveDirection(stopOf(query), undefined, 6 * 3600_000)
+      .then((d) => alive && setDir(d))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
   if (!query) return null;
@@ -178,6 +201,14 @@ export function LiveArrivals({
                 <Text style={[styles.routeNo, { color: rs.color }]}>{g.routeNo}</Text>
                 <Text style={[styles.routeType, { color: t.sub }]}>{rs.label}</Text>
               </View>
+              {(() => {
+                const dirText = first.direction ?? dir?.routeDirections?.[g.routeNo] ?? (dir?.label || '');
+                return dirText ? (
+                  <Text style={{ color: t.primary, fontSize: compact ? 12 : 12.5, fontWeight: '700', marginTop: 1 }} numberOfLines={1}>
+                    → {dirText}
+                  </Text>
+                ) : null;
+              })()}
               {!compact && (plate || seats) ? (
                 <Text style={{ color: t.sub, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
                   {[plate, seats ? `좌석 ${seats}` : ''].filter(Boolean).join(' · ')}

@@ -66,7 +66,7 @@ export function useNearbyStops(limit = 6) {
         for (const s of top) {
           const k = stopKeyOf(s);
           setDirections((d) => ({ ...d, [k]: d[k] && d[k] !== 'error' ? d[k] : 'loading' }));
-          resolveDirection(s, all)
+          resolveDirection(s, all, 6 * 3600_000)
             .then((dir) => setDirections((d) => ({ ...d, [k]: dir })))
             .catch(() => setDirections((d) => ({ ...d, [k]: 'error' })));
         }

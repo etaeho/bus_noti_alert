@@ -272,3 +272,36 @@ describe('명석고 11690 전체 흐름 (실제 좌표·도착정보, 노선정�
     assert.equal(d.estimated, undefined);
   });
 });
+
+import { pickRouteNextStops } from '../src/core/busApi';
+import { formatArrivalMessage, formatStageMessage } from '../src/core/format';
+
+describe('버스별 방면', () => {
+  it('명석고 11690: 노선별 다음 정류장 (실제 데이터)', () => {
+    const neighbors = Object.entries(REAL)
+      .filter(([k]) => k !== '11690')
+      .map(([k, counts]) => ({ stop: k, counts }));
+    const per = pickRouteNextStops(REAL['11690'], neighbors, '한국폴리텍대학11640');
+    for (const r of ['103', '105', '106', '613', '620', '66']) assert.equal(per[r], '한국폴리텍대학11640', r);
+    // 311 은 사이에 다른 버스가 있어 개별 판별 불가 → 정류장 전체 방면으로 채움
+    assert.equal(per['311'], undefined);
+  });
+  it('서울: adirection 으로 버스별 방면', async () => {
+    mockFetch({
+      getStationByUid: {
+        msgHeader: { headerCd: '0' },
+        msgBody: { itemList: [{ rtNm: '472', adirection: '신촌', arrmsg1: '3분후[2번째 전]' }, { rtNm: '140', adirection: '도봉산', arrmsg1: '5분후[3번째 전]' }] },
+      },
+    });
+    const list = await fetchArrivals('KEY', { region: 'seoul', stopNo: '22009', routes: [] });
+    assert.deepEqual(list.map((a) => a.direction), ['신촌 방면', '도봉산 방면']);
+  });
+  it('알림 내용에 방면 표시', () => {
+    const arr = {
+      regionLabel: '대전', stopName: '명석고등학교', stopNo: '11690', routeNo: '311', arrSec: 211,
+      prevStationCnt: '3', vehicleType: '', vehicleIdOrPlate: '', extraInfo: '노선유형: 간선버스', direction: '한국폴리텍대학 방면',
+    };
+    assert.match(formatArrivalMessage(arr).body, /🧭 방면 : 한국폴리텍대학 방면/);
+    assert.match(formatStageMessage(arr, 3).body, /🧭 한국폴리텍대학 방면/);
+  });
+});

@@ -8,6 +8,7 @@ import { decideAlarmNotifications, decideRide, emptyAlarmState, type OutgoingNot
 import { formatArrivalMessage } from '../core/format';
 import { getActiveWindow, isWindowActiveOrSoon } from '../core/schedule';
 import type { BusAlarm } from '../core/types';
+import { attachDirections } from './directionCache';
 import { CHANNEL_RIDE, deliver } from './notify';
 import {
   appendLog,
@@ -64,7 +65,7 @@ async function tickAlarms(): Promise<void> {
 
     apiKey ??= await getApiKey();
     try {
-      const arrivals = await fetchArrivals(apiKey, alarm);
+      const arrivals = await attachDirections(alarm, await fetchArrivals(apiKey, alarm));
       const { notifications, state } = decideAlarmNotifications(
         alarm,
         arrivals,
@@ -124,7 +125,7 @@ async function tickRide(): Promise<void> {
 /** "지금 1회 점검" (원본 RUN_ONCE_NOW): 시간대와 무관하게 조회해서 노선별 1건씩 알림 */
 export async function runOnceNow(alarm: BusAlarm, sendNotification: boolean) {
   const apiKey = await getApiKey();
-  const arrivals = await fetchArrivals(apiKey, alarm);
+  const arrivals = await attachDirections(alarm, await fetchArrivals(apiKey, alarm));
   if (sendNotification) {
     const seen = new Set<string>();
     const out: OutgoingNotification[] = [];
