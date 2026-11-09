@@ -28,6 +28,10 @@ export interface StopMapProps {
   onSelect?: (id: string) => void;
   onMoved?: (center: { latitude: number; longitude: number }) => void;
   height?: number;
+  /** 모서리 둥글림 없이 (전체 화면 지도) */
+  flat?: boolean;
+  /** 아래쪽이 시트로 가려지는 높이(px) - 선택 정류장을 보이는 영역 가운데에 */
+  bottomInset?: number;
 }
 
 export interface StopMapHandle {
@@ -52,10 +56,11 @@ var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMe
 var map=L.map('map',{zoomControl:true,attributionControl:true}).setView([36.35,127.38],16);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',{maxZoom:19,subdomains:'abcd',attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(map);
 var layer=L.layerGroup().addTo(map), meLayer=L.layerGroup().addTo(map), arrowLayer=L.layerGroup().addTo(map);
-var lastKey='';
+var lastKey='';var inset=0;
 map.on('moveend',function(){var c=map.getCenter();post({type:'moved',lat:c.lat,lng:c.lng})});
 function bearing(a,b){var t=Math.PI/180,y=Math.sin((b[1]-a[1])*t)*Math.cos(b[0]*t),x=Math.cos(a[0]*t)*Math.sin(b[0]*t)-Math.sin(a[0]*t)*Math.cos(b[0]*t)*Math.cos((b[1]-a[1])*t);return Math.atan2(y,x)/t}
 window.setData=function(d){
+  inset=d.inset||0;
   layer.clearLayers();arrowLayer.clearLayers();meLayer.clearLayers();
   var pts=[];
   (d.stops||[]).forEach(function(s){
@@ -78,13 +83,13 @@ window.setData=function(d){
   }
   var key=JSON.stringify(pts)+'|'+d.selectedId;
   if(d.fit&&key!==lastKey){
-    if(sel&&d.arrowTo){map.fitBounds(L.latLngBounds([[sel.latitude,sel.longitude],[d.arrowTo.latitude,d.arrowTo.longitude]]).pad(0.6),{maxZoom:18})}
-    else if(sel){map.setView([sel.latitude,sel.longitude],18)}
+    if(sel&&d.arrowTo){map.fitBounds(L.latLngBounds([[sel.latitude,sel.longitude],[d.arrowTo.latitude,d.arrowTo.longitude]]).pad(0.6),{maxZoom:18,paddingBottomRight:[0,inset]})}
+    else if(sel){map.setView([sel.latitude,sel.longitude],17,{animate:false});if(inset)map.panBy([0,inset/2],{animate:false})}
     else if(d.me&&pts.length){
       // 현재 위치 기준으로 가장 가까운 정류장들만 보이게 가깝게 확대
       var near=pts.slice().sort(function(a,b){return map.distance(a,[d.me.latitude,d.me.longitude])-map.distance(b,[d.me.latitude,d.me.longitude])}).slice(0,6);
       near.push([d.me.latitude,d.me.longitude]);
-      map.fitBounds(L.latLngBounds(near).pad(0.15),{maxZoom:18});
+      map.fitBounds(L.latLngBounds(near).pad(0.15),{maxZoom:18,paddingBottomRight:[0,inset]});
     }
     else if(pts.length>1){map.fitBounds(L.latLngBounds(pts).pad(0.1),{maxZoom:18})}
     else if(pts.length===1){map.setView(pts[0],17)}
@@ -92,12 +97,12 @@ window.setData=function(d){
   }
   lastKey=key;
 };
-window.focusTo=function(lat,lng,z){map.setView([lat,lng],z||16)};
+window.focusTo=function(lat,lng,z){map.setView([lat,lng],z||16,{animate:false});if(inset)map.panBy([0,inset/2],{animate:false})};
 post({type:'ready'});
 </script></body></html>`;
 
 const LeafletStopMap = forwardRef<StopMapHandle, StopMapProps>(function LeafletStopMap(
-  { stops, selectedId, me, arrowTo, onSelect, onMoved, height = 300 },
+  { stops, selectedId, me, arrowTo, onSelect, onMoved, height = 300, flat, bottomInset = 0 },
   ref,
 ) {
   const web = useRef<WebView>(null);
@@ -111,9 +116,9 @@ const LeafletStopMap = forwardRef<StopMapHandle, StopMapProps>(function LeafletS
 
   useEffect(() => {
     if (!ready) return;
-    const payload = JSON.stringify({ stops, selectedId: selectedId ?? null, me: me ?? null, arrowTo: arrowTo ?? null, fit: true });
+    const payload = JSON.stringify({ stops, selectedId: selectedId ?? null, me: me ?? null, arrowTo: arrowTo ?? null, fit: true, inset: bottomInset });
     web.current?.injectJavaScript(`window.setData(${payload});true;`);
-  }, [ready, stops, selectedId, me, arrowTo]);
+  }, [ready, stops, selectedId, me, arrowTo, bottomInset]);
 
   const onMessage = (e: WebViewMessageEvent) => {
     try {
@@ -130,7 +135,7 @@ const LeafletStopMap = forwardRef<StopMapHandle, StopMapProps>(function LeafletS
   };
 
   return (
-    <View style={[styles.wrap, { height }]}>
+    <View style={[styles.wrap, { height }, flat && { borderRadius: 0 }]}>
       <MapWebView
         ref={web}
         originWhitelist={['*']}

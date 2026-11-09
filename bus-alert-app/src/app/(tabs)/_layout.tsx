@@ -1,3 +1,4 @@
+import { StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Notifications from 'expo-notifications';
 import { router, useFocusEffect } from 'expo-router';
@@ -59,8 +60,8 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: t.primary,
         tabBarInactiveTintColor: t.sub,
-        tabBarStyle: { backgroundColor: t.card, borderTopColor: t.border, height: 64, paddingTop: 6, paddingBottom: 8 },
-        tabBarLabelStyle: { fontSize: 11.5, fontWeight: '800' },
+        tabBarStyle: { backgroundColor: t.card, borderTopColor: t.border, borderTopWidth: StyleSheet.hairlineWidth, elevation: 0, height: 62, paddingTop: 6, paddingBottom: 8 },
+        tabBarLabelStyle: { fontSize: 10.5, fontWeight: '600' },
         sceneStyle: { backgroundColor: t.bg },
       }}
     >

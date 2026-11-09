@@ -9,7 +9,7 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type Region } from 'react-n
 import type { StopMapHandle, StopMapProps } from './StopMap';
 
 export const GoogleStopMap = forwardRef<StopMapHandle, StopMapProps>(function GoogleStopMap(
-  { stops, selectedId, me, arrowTo, onSelect, onMoved, height = 300 },
+  { stops, selectedId, me, arrowTo, onSelect, onMoved, height = 300, flat, bottomInset = 0 },
   ref,
 ) {
   const map = useRef<MapView>(null);
@@ -56,7 +56,7 @@ export const GoogleStopMap = forwardRef<StopMapHandle, StopMapProps>(function Go
   const start = sel ?? stops[0] ?? me;
 
   return (
-    <View style={[styles.wrap, { height }]}>
+    <View style={[styles.wrap, { height }, flat && { borderRadius: 0 }]}>
       <MapView
         ref={map}
         provider={PROVIDER_GOOGLE}
@@ -67,6 +67,7 @@ export const GoogleStopMap = forwardRef<StopMapHandle, StopMapProps>(function Go
           latitudeDelta: sel ? 0.003 : 0.005,
           longitudeDelta: sel ? 0.003 : 0.005,
         }}
+        mapPadding={{ top: 0, right: 0, bottom: bottomInset, left: 0 }}
         onMapReady={() => setReady(true)}
         showsUserLocation={!!me}
         showsMyLocationButton={false}

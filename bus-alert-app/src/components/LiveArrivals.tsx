@@ -28,6 +28,10 @@ export interface LiveArrivalsProps {
   compact?: boolean;
   /** 강조한 노선을 맨 위에 고정 (선택용 목록에서는 끔: 누를 때 순서가 바뀌면 헷갈림) */
   pinHighlighted?: boolean;
+  /** 바텀시트용: 노선 번호 배지 · 방면 · 도착 시간 한 줄 (테두리 없이) */
+  sheet?: boolean;
+  /** 갱신 시각을 알려 줌 (시트 머리말 표시용) */
+  onUpdated?: (at: Date) => void;
 }
 
 interface RouteGroup {
@@ -80,6 +84,8 @@ export function LiveArrivals({
   maxRows = 12,
   compact = false,
   pinHighlighted = false,
+  sheet = false,
+  onUpdated,
 }: LiveArrivalsProps) {
   const t = useTheme();
   const [rows, setRows] = useState<UnifiedArrival[] | null>(null);
@@ -100,7 +106,9 @@ export function LiveArrivals({
       if (my !== seq.current) return;
       setRows(list);
       setError('');
-      setUpdatedAt(new Date());
+      const now = new Date();
+      setUpdatedAt(now);
+      onUpdated?.(now);
     } catch (e) {
       if (my !== seq.current) return;
       setError((e as Error).message);
@@ -185,6 +193,39 @@ export function LiveArrivals({
         const soon = first.arrSec <= 120;
         const plate = first.vehicleIdOrPlate;
         const seats = first.extraInfo.match(/잔여좌석: (\d+)석/)?.[1];
+        if (sheet) {
+          const dirText = first.direction ?? dir?.routeDirections?.[g.routeNo] ?? (dir?.label || '');
+          const line1 = dirText ? `${dirText.replace(/\s*방면$/, '')} 방면` : (dir?.routeEnds?.[g.routeNo] ?? rs.label);
+          const line2 = [stopsLabel(first.prevStationCnt), second ? `다음 ${eta(second.arrSec)}` : ''].filter(Boolean).join(' · ');
+          const m = first.arrSec > 60 ? Math.round(first.arrSec / 60) : 0;
+          return (
+            <View key={g.routeNo} style={[styles.sheetRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.border }]}>
+              <View style={[styles.pill, { backgroundColor: rs.color }]}>
+                <Text style={styles.pillText} numberOfLines={1}>
+                  {g.routeNo}
+                </Text>
+              </View>
+              <View style={{ flex: 1, marginHorizontal: 12 }}>
+                <Text style={{ color: t.text, fontSize: 14.5, fontWeight: '600' }} numberOfLines={1}>
+                  {line1}
+                </Text>
+                {line2 ? (
+                  <Text style={{ color: t.sub, fontSize: 12.5, marginTop: 1 }} numberOfLines={1}>
+                    {line2}
+                  </Text>
+                ) : null}
+              </View>
+              {m ? (
+                <Text style={[styles.sheetEta, { color: soon ? t.danger : t.text }]}>
+                  {m}
+                  <Text style={{ fontSize: 14, fontWeight: '600' }}>분</Text>
+                </Text>
+              ) : (
+                <Text style={[styles.sheetEta, { color: t.danger }]}>곧 도착</Text>
+              )}
+            </View>
+          );
+        }
         return (
           <Pressable
             key={g.routeNo}
@@ -242,6 +283,8 @@ export function LiveArrivals({
     </>
   );
 
+  if (sheet) return <View>{body}</View>;
+
   if (compact) {
     return (
       <View style={{ marginTop: 8 }}>
@@ -294,4 +337,8 @@ const styles = StyleSheet.create({
   skeleton: { height: 44, borderRadius: 10, marginVertical: 5 },
   notice: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, marginVertical: 4 },
   emptyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+  sheetRow: { flexDirection: 'row', alignItems: 'center', minHeight: 62, paddingVertical: 8 },
+  pill: { minWidth: 48, height: 26, paddingHorizontal: 8, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  pillText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  sheetEta: { fontSize: 17, fontWeight: '800', fontVariant: ['tabular-nums'] },
 });
