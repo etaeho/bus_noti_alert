@@ -1,0 +1,23 @@
+name: 공공데이터 API 조회 (명석고 기준)
+
+on:
+  push:
+    paths:
+      - 'tools/api_probe.py'
+      - '.github/workflows/api_probe.yml'
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests
+      - name: 명석고(11690) 관련 API 응답 출력
+        env:
+          DATA_GO_KR_API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
+        run: python tools/api_probe.py
