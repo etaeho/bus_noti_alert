@@ -4,7 +4,8 @@
 import * as Location from 'expo-location';
 import { useCallback, useRef, useState } from 'react';
 
-import { nearbyStops, regionFromAddress, stopDirection } from '../core/busApi';
+import { nearbyStops, regionFromAddress } from '../core/busApi';
+import { resolveDirection } from './directionCache';
 import { distanceM } from '../core/decide';
 import type { Region, StopCandidate, StopDirection } from '../core/types';
 import { getApiKey, stopKeyOf } from './storage';
@@ -65,7 +66,7 @@ export function useNearbyStops(limit = 6) {
         for (const s of top) {
           const k = stopKeyOf(s);
           setDirections((d) => ({ ...d, [k]: d[k] && d[k] !== 'error' ? d[k] : 'loading' }));
-          stopDirection(key, s, all)
+          resolveDirection(s, all)
             .then((dir) => setDirections((d) => ({ ...d, [k]: dir })))
             .catch(() => setDirections((d) => ({ ...d, [k]: 'error' })));
         }

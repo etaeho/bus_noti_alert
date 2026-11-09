@@ -264,3 +264,30 @@ export async function addRecentStop(stop: StopCandidate, directionLabel: string)
   list.unshift({ key, stop, directionLabel, addedAt: Date.now() });
   await writeJson(RECENT_STOPS_KEY, list.slice(0, 8));
 }
+
+/** 즐겨찾기/최근 본 정류장의 방면 문구 갱신 (예전에 저장된 추정값 교체) */
+export async function updateSavedDirection(key: string, directionLabel: string): Promise<void> {
+  const favs = await getFavorites();
+  let changed = false;
+  for (const f of favs) {
+    if (f.key === key && f.directionLabel !== directionLabel) {
+      f.directionLabel = directionLabel;
+      changed = true;
+    }
+  }
+  if (changed) await writeJson(FAVORITES_KEY, favs);
+  const recent = await getRecentStops();
+  let changedR = false;
+  for (const r of recent) {
+    if (r.key === key && r.directionLabel !== directionLabel) {
+      r.directionLabel = directionLabel;
+      changedR = true;
+    }
+  }
+  if (changedR) await writeJson(RECENT_STOPS_KEY, recent);
+}
+
+/** 예전 버전이 저장한 위치 추정 방면인지 */
+export function isStaleDirection(label: string): boolean {
+  return !label || /위치로 추정|방향 \(추정\)/.test(label);
+}

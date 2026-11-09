@@ -7,7 +7,6 @@
 import { XMLParser } from 'fast-xml-parser';
 
 import { distanceM } from './decide';
-import { estimateTravelDirection, findPairStop } from './geoDirection';
 
 import {
   TAGO_CITY_CODES,
@@ -725,10 +724,12 @@ export async function stopDirection(
   } catch {
     // 아래 추정으로
   }
-  // 노선정보로 못 찾으면 길 건너편 정류장 위치로 추정
-  const est = await estimateFromNeighbors(key, stop, neighbors);
-  if (est) return { label: est.label, routes, estimated: true, note };
-  return { label: '', routes, note: note || '방면 정보를 찾지 못했습니다' };
+  // 위치만으로 추정하면 정류장이 길을 따라 어긋나 있을 때 틀리므로(예: 명석고 11690) 쓰지 않는다.
+  return {
+    label: '',
+    routes,
+    note: note && !/활용신청/.test(note) ? note : '지금 운행 중인 버스 정보로는 방면을 판별하지 못했습니다',
+  };
 }
 
 function apiNote(e: unknown, apiName: string): string {
@@ -788,6 +789,16 @@ export function pickNextStop<T>(
   return best;
 }
 
+const nearbyMemo = new Map<string, { at: number; list: StopCandidate[] }>();
+async function nearbyStopsMemo(key: string, stop: StopCandidate): Promise<StopCandidate[]> {
+  const k = `${stop.region}:${stop.stationId}`;
+  const m = nearbyMemo.get(k);
+  if (m && Date.now() - m.at < 10 * 60_000) return m.list;
+  const list = await nearbyStops(key, stop.region, stop.latitude!, stop.longitude!);
+  nearbyMemo.set(k, { at: Date.now(), list });
+  return list;
+}
+
 async function nextStopByArrivals(
   key: string,
   city: string,
@@ -797,14 +808,23 @@ async function nextStopByArrivals(
   if (!stop.stationId || stop.latitude == null || stop.longitude == null) return null;
   const self = await tagoRouteCounts(key, city, stop.stationId);
   if (Object.keys(self).length < 2) return null; // 운행 중인 버스가 거의 없으면 판별 불가
-  let list = neighbors?.length ? neighbors : await nearbyStops(key, stop.region, stop.latitude, stop.longitude);
-  if (neighbors?.length && list.length < 4) list = await nearbyStops(key, stop.region, stop.latitude, stop.longitude);
+  // 이웃은 항상 "이 정류장" 주변에서 찾는다 (넘겨받은 목록은 내 위치 주변일 수 있음)
+  const within = (l: StopCandidate[]) =>
+    l.filter(
+      (n) =>
+        n.stationId &&
+        n.stationId !== stop.stationId &&
+        n.latitude != null &&
+        n.longitude != null &&
+        distanceM(stop.latitude!, stop.longitude!, n.latitude, n.longitude) < 900,
+    );
+  let list = within(neighbors ?? []);
+  if (list.length < 10) list = within(await nearbyStopsMemo(key, stop));
+  // 다음 정류장이 400m 넘게 떨어져 있기도 해서(명석고 11690 → 한국폴리텍대학 약 420m) 넉넉히 14곳까지 비교
   const near = list
-    .filter((n) => n.stationId && n.stationId !== stop.stationId && n.latitude != null && n.longitude != null)
     .map((n) => ({ n, d: distanceM(stop.latitude!, stop.longitude!, n.latitude!, n.longitude!) }))
-    .filter((x) => x.d < 900)
     .sort((a, b) => a.d - b.d)
-    .slice(0, 8)
+    .slice(0, 14)
     .map((x) => x.n);
   const withCounts: { stop: StopCandidate; counts: RouteCounts }[] = [];
   for (const n of near) {
@@ -815,23 +835,6 @@ async function nextStopByArrivals(
     }
   }
   return pickNextStop(self, withCounts)?.stop ?? null;
-}
-
-async function estimateFromNeighbors(
-  key: string,
-  stop: StopCandidate,
-  neighbors?: StopCandidate[],
-): Promise<{ label: string } | null> {
-  if (stop.latitude == null || stop.longitude == null) return null;
-  let list = neighbors;
-  if (!list || !findPairStop(stop, list)) {
-    try {
-      list = await nearbyStops(key, stop.region, stop.latitude, stop.longitude);
-    } catch {
-      return null;
-    }
-  }
-  return estimateTravelDirection(stop, list);
 }
 
 function mostCommon(values: string[]): string | undefined {

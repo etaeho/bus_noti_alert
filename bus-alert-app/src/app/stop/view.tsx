@@ -8,12 +8,13 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LiveArrivals } from '../../components/LiveArrivals';
 import { StopMap } from '../../components/StopMap';
 import { Button, Card, Icon, Muted, Pill, useTheme } from '../../components/ui';
-import { stopDirection } from '../../core/busApi';
+import { resolveDirection } from '../../services/directionCache';
 import { REGION_LABELS, type StopDirection } from '../../core/types';
 import { setPickedStop } from '../../services/pickerStore';
 import { stopFromParams } from '../../services/stopNav';
 import { useFavorites } from '../../components/useFavorites';
-import { addRecentStop, getApiKey, getFavorites, stopKeyOf } from '../../services/storage';
+import { addRecentStop, getApiKey, getFavorites, isStaleDirection, stopKeyOf } from '../../services/storage';
+import { lookupStop } from '../../core/busApi';
 
 export default function StopViewScreen() {
   const t = useTheme();
@@ -24,15 +25,31 @@ export default function StopViewScreen() {
   const fav = favs.keys.has(key);
   const [nickname, setNickname] = useState('');
   const [direction, setDirection] = useState<StopDirection | null>(null);
+  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  // 좌표가 없는 정류장(예: 번호로만 저장된 경우)은 조회해서 지도에 표시
+  useEffect(() => {
+    if (stop.latitude != null && stop.longitude != null) return;
+    if (!stop.stopNo) return;
+    void (async () => {
+      try {
+        const info = await lookupStop(await getApiKey(), stop.region, stop.stopNo, stop.cityCode);
+        if (info.latitude != null && info.longitude != null) setCoords({ latitude: info.latitude, longitude: info.longitude });
+      } catch {
+        // 지도 없이 표시
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
   useEffect(() => {
     void getFavorites().then((l) => setNickname(l.find((f) => f.key === key)?.nickname ?? ''));
     (async () => {
-      let label = dirParam;
+      let label = isStaleDirection(dirParam) ? '' : dirParam;
       try {
-        const d = await stopDirection(await getApiKey(), stop);
+        const d = await resolveDirection(stop);
         setDirection(d);
-        label = d.label || dirParam;
+        label = d.label || label;
       } catch {
         // 방면 정보 없음
       }
@@ -41,7 +58,7 @@ export default function StopViewScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  const dirLabel = direction?.label || dirParam;
+  const dirLabel = direction?.label || (isStaleDirection(dirParam) ? '' : dirParam);
 
   const toggleFav = useCallback(() => void favs.toggle(stop, dirLabel), [favs, stop, dirLabel]);
 
@@ -51,10 +68,9 @@ export default function StopViewScreen() {
 
   const picked = () => ({ stop, direction: direction ?? (dirLabel ? { label: dirLabel, routes: [] } : null) });
 
-  const mapStops =
-    stop.latitude && stop.longitude
-      ? [{ id: key, latitude: stop.latitude, longitude: stop.longitude, label: stop.stopName.slice(0, 12) }]
-      : [];
+  const lat = stop.latitude ?? coords?.latitude;
+  const lng = stop.longitude ?? coords?.longitude;
+  const mapStops = lat && lng ? [{ id: key, latitude: lat, longitude: lng, label: stop.stopName.slice(0, 12) }] : [];
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -68,6 +84,24 @@ export default function StopViewScreen() {
           ),
         }}
       />
+
+      {mapStops.length ? (
+        <View style={{ marginBottom: 12 }}>
+          <StopMap
+            stops={mapStops}
+            selectedId={key}
+            arrowTo={
+              direction?.nextLatitude && direction.nextLongitude
+                ? { latitude: direction.nextLatitude, longitude: direction.nextLongitude }
+                : null
+            }
+            height={240}
+          />
+          {direction?.nextLatitude ? (
+            <Muted style={{ marginTop: 6 }}>빨간 화살표: 버스가 가는 방향 (다음 정류장: {direction.nextStopName})</Muted>
+          ) : null}
+        </View>
+      ) : null}
 
       <Card>
         {fav && nickname ? <Text style={{ color: '#F5B301', fontWeight: '900', marginBottom: 2 }}>⭐ {nickname}</Text> : null}
@@ -102,21 +136,6 @@ export default function StopViewScreen() {
         maxRows={30}
       />
 
-      {mapStops.length ? (
-        <View style={{ marginTop: 12 }}>
-          <StopMap
-            stops={mapStops}
-            selectedId={key}
-            arrowTo={
-              direction?.nextLatitude && direction.nextLongitude
-                ? { latitude: direction.nextLatitude, longitude: direction.nextLongitude }
-                : null
-            }
-            height={220}
-          />
-          <Muted style={{ marginTop: 6 }}>빨간 화살표: 버스가 가는 방향 (다음 정류장)</Muted>
-        </View>
-      ) : null}
 
       <View style={{ height: 14 }} />
       <Button

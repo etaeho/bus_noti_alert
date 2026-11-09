@@ -157,7 +157,7 @@ describe('방면 추정 (우측통행)', () => {
     const a = { ...base, stationId: 'A', latitude: 36.31, longitude: 127.36 };
     assert.equal(estimateTravelDirection(a, [a]), null);
   });
-  it('노선정보 API 미신청 시 안내 문구 + 위치 추정', async () => {
+  it('노선정보 API 미신청 + 도착정보로도 판별 불가 → 방면 없음 (위치 추정은 쓰지 않음)', async () => {
     const authErr =
       '<OpenAPI_ServiceResponse><cmmMsgHeader><errMsg>SERVICE ERROR</errMsg><returnAuthMsg>SERVICE_KEY_IS_NOT_REGISTERED_ERROR</returnAuthMsg></cmmMsgHeader></OpenAPI_ServiceResponse>';
     globalThis.fetch = (async (input: string | URL | Request) => {
@@ -169,9 +169,8 @@ describe('방면 추정 (우측통행)', () => {
     const east = { ...base, stationId: 'E', latitude: 36.31, longitude: 127.3604 };
     const west = { ...base, stationId: 'W', latitude: 36.31, longitude: 127.36 };
     const d = await stopDirection('KEY', east, [east, west]);
-    assert.match(d.label, /북쪽 방향/);
-    assert.equal(d.estimated, true);
-    assert.match(d.note ?? '', /버스노선정보/);
+    assert.equal(d.label, '');
+    assert.ok(d.note);
     assert.deepEqual(d.routes, ['311']);
   });
 });
@@ -215,5 +214,61 @@ describe('도착정보로 다음 정류장 찾기 (명석고 실제 데이터)',
     const all = (self: string) => Object.entries(REAL).filter(([k]) => k !== self).map(([k, counts]) => ({ stop: k, counts }));
     assert.equal(pickNextStop(REAL['11690'], all('11690'))?.stop, '한국폴리텍대학11640');
     assert.equal(pickNextStop(REAL['51630'], all('51630'))?.stop, '길치근린공원51640');
+  });
+});
+
+describe('명석고 11690 전체 흐름 (실제 좌표·도착정보, 노선정보 API 403)', () => {
+  const STOPS = [
+    ['DJB8001612', '명석고등학교', 11690, 36.354073, 127.45417],
+    ['DJB8001611', '명석고등학교', 51630, 36.353424, 127.45411],
+    ['DJB8007413', '길치근린공원네거리', 53510, 36.355076, 127.45628],
+    ['DJB8007416', '평화아파트', 53530, 36.35431, 127.451675],
+    ['DJB8007414', '길치근린공원네거리', 53520, 36.35535, 127.45651],
+    ['DJB8001032', '길치근린공원', 51640, 36.356636, 127.45445],
+    ['DJB8002843', '평화아파트', 11620, 36.354103, 127.450836],
+    ['DJB8001033', '길치근린공원', 51620, 36.357056, 127.453514],
+    ['DJB8002894', '한국폴리텍대학', 11650, 36.350624, 127.45245],
+    ['DJB8002893', '한국폴리텍대학', 11640, 36.350567, 127.452126],
+    ['DJB9001891', '삼호아파트', '', 36.35399, 127.44925],
+  ] as const;
+  const ARR: Record<string, string> = {
+    DJB8001612: '103:4/369 105:2/1346 106:1/37 311:3/168 613:3/145 620:11/1354 66:4/1410',
+    DJB8001611: '103:4/335 105:2/126 106:7/626 311:1/39 613:2/126 620:3/256 66:9/775',
+    DJB8007413: '66:9/715',
+    DJB8007416: '66:9/1400',
+    DJB8007414: '',
+    DJB8001032: '103:5/416 105:3/207 106:8/707 311:2/120 613:3/207 620:4/337 66:10/856',
+    DJB8002843: '105:1/1346 66:8/607',
+    DJB8001033: '103:3/313 106:3/1350 311:2/112 613:2/89 620:10/1354 66:3/1410',
+    DJB8002894: '103:3/271 105:1/62 106:6/562 311:5/503 613:1/62 620:2/192 66:8/711',
+    DJB8002893: '103:5/448 105:3/1346 106:2/116 311:1/48 613:4/224 620:12/1354 66:5/1410',
+    DJB9001891: '66:7/560',
+  };
+  const arrItems = (nodeId: string) =>
+    (ARR[nodeId] || '').split(/\s+/).filter(Boolean).map((p) => {
+      const [r, rest] = p.split(':');
+      const [cnt, sec] = rest.split('/').map(Number);
+      return { routeno: r, arrprevstationcnt: cnt, arrtime: sec, nodeid: nodeId };
+    });
+
+  it('→ 한국폴리텍대학 방면 (다음 정류장 좌표 포함)', async () => {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      const path = url.pathname;
+      if (path.endsWith('getSttnThrghRouteList')) return new Response(JSON.stringify(tago([{ routeid: 'DJB30300055', routeno: 311 }])));
+      if (path.endsWith('getRouteAcctoThrghSttnList')) return new Response('Forbidden', { status: 403 });
+      if (path.endsWith('getCrdntPrxmtSttnList'))
+        return new Response(
+          JSON.stringify(tago(STOPS.map(([nodeid, nodenm, nodeno, gpslati, gpslong]) => ({ citycode: 25, nodeid, nodenm, nodeno, gpslati, gpslong })))),
+        );
+      if (path.endsWith('getSttnAcctoArvlPrearngeInfoList')) return new Response(JSON.stringify(tago(arrItems(url.searchParams.get('nodeId')!))));
+      return new Response('x', { status: 404 });
+    }) as typeof fetch;
+    const d = await stopDirection('KEY', {
+      region: 'daejeon', cityCode: '25', stopNo: '11690', stopName: '명석고등학교', stationId: 'DJB8001612', latitude: 36.354073, longitude: 127.45417,
+    });
+    assert.equal(d.label, '한국폴리텍대학 방면');
+    assert.equal(d.nextLatitude, 36.350567);
+    assert.equal(d.estimated, undefined);
   });
 });

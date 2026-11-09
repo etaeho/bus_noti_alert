@@ -2,7 +2,7 @@
  * Google 지도 버전 정류장 지도 (빌드 시 GOOGLE_MAPS_API_KEY 가 있을 때만 사용)
  * StopMap 과 같은 props / ref 인터페이스.
  */
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
@@ -24,8 +24,11 @@ export const GoogleStopMap = forwardRef<StopMapHandle, StopMapProps>(function Go
     },
   }));
 
-  // 결과/선택이 바뀌면 화면 맞춤
+  const [ready, setReady] = useState(false);
+
+  // 결과/선택이 바뀌면 화면 맞춤 (지도가 준비된 뒤에만 - 준비 전 명령은 무시됨)
   useEffect(() => {
+    if (!ready) return;
     const sel = stops.find((s) => s.id === selectedId);
     const key = `${stops.map((s) => s.id).join(',')}|${selectedId ?? ''}|${arrowTo ? 'a' : ''}`;
     if (key === lastFitKey.current) return;
@@ -46,9 +49,11 @@ export const GoogleStopMap = forwardRef<StopMapHandle, StopMapProps>(function Go
     } else if (coords.length > 1) {
       map.current?.fitToCoordinates(coords, { edgePadding: { top: 60, right: 60, bottom: 60, left: 60 }, animated: true });
     }
-  }, [stops, selectedId, arrowTo, me]);
+  }, [stops, selectedId, arrowTo, me, ready]);
 
   const sel = stops.find((s) => s.id === selectedId);
+  // 처음 열 때부터 선택된 정류장(없으면 첫 정류장 → 내 위치) 중심으로
+  const start = sel ?? stops[0] ?? me;
 
   return (
     <View style={[styles.wrap, { height }]}>
@@ -57,11 +62,12 @@ export const GoogleStopMap = forwardRef<StopMapHandle, StopMapProps>(function Go
         provider={PROVIDER_GOOGLE}
         style={StyleSheet.absoluteFill}
         initialRegion={{
-          latitude: me?.latitude ?? 36.35,
-          longitude: me?.longitude ?? 127.38,
-          latitudeDelta: 0.005,
-          longitudeDelta: 0.005,
+          latitude: start?.latitude ?? 36.35,
+          longitude: start?.longitude ?? 127.38,
+          latitudeDelta: sel ? 0.003 : 0.005,
+          longitudeDelta: sel ? 0.003 : 0.005,
         }}
+        onMapReady={() => setReady(true)}
         showsUserLocation={!!me}
         showsMyLocationButton={false}
         toolbarEnabled={false}

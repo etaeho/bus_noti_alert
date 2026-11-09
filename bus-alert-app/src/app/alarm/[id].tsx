@@ -14,7 +14,7 @@ import {
 
 import { LiveArrivals } from '../../components/LiveArrivals';
 import { Button, Card, Chip, Field, Label, Muted, SectionTitle, Stepper, TimeStepper, ToggleRow, useTheme } from '../../components/ui';
-import { stopDirection } from '../../core/busApi';
+import { resolveDirection } from '../../services/directionCache';
 import { formatArrSec } from '../../core/format';
 import { REGION_LABELS, TAGO_CITY_CODES, WEEKDAY_LABELS, type BusAlarm, type Region, type UnifiedArrival, type Weekday } from '../../core/types';
 import { runOnceNow } from '../../services/monitor';
@@ -89,7 +89,7 @@ export default function AlarmEditScreen() {
     let alive = true;
     (async () => {
       try {
-        const d = await stopDirection(await getApiKey(), {
+        const d = await resolveDirection({
           region: a.region,
           stopNo: a.stopNo,
           stationId: a.stationId,

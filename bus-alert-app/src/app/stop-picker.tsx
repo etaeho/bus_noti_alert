@@ -21,9 +21,10 @@ import { LiveArrivals } from '../components/LiveArrivals';
 import { StopMap, type MapStop, type StopMapHandle } from '../components/StopMap';
 import { Button, Chip, Muted, useTheme } from '../components/ui';
 import { distanceM } from '../core/decide';
-import { nearbyStops, regionFromAddress, searchStopsByName, stopDirection } from '../core/busApi';
+import { nearbyStops, regionFromAddress, searchStopsByName } from '../core/busApi';
 import { REGION_LABELS, type Region, type StopCandidate, type StopDirection } from '../core/types';
 import { setPickedStop } from '../services/pickerStore';
+import { resolveDirection } from '../services/directionCache';
 import { openStopDetail } from '../services/stopNav';
 import { getApiKey, stopKeyOf } from '../services/storage';
 import { useFavorites } from '../components/useFavorites';
@@ -68,7 +69,7 @@ export default function StopPickerScreen() {
     const k = stopKey(s);
     setDirections((d) => (d[k] && d[k] !== 'error' ? d : { ...d, [k]: 'loading' }));
     try {
-      const dir = await stopDirection(apiKey.current, s, resultsRef.current);
+      const dir = await resolveDirection(s, resultsRef.current);
       setDirections((d) => ({ ...d, [k]: dir }));
     } catch {
       setDirections((d) => ({ ...d, [k]: 'error' }));

@@ -5,7 +5,7 @@
  *  3) 최근 본 정류장
  */
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { HeroHeader } from '../../components/HeroHeader';
@@ -14,11 +14,13 @@ import { NamePrompt } from '../../components/NamePrompt';
 import { Button, Card, EmptyState, Icon, Muted, SectionTitle, useTheme } from '../../components/ui';
 import { useFavorites } from '../../components/useFavorites';
 import { REGION_LABELS, type StopCandidate } from '../../core/types';
+import { resolveDirection } from '../../services/directionCache';
 import { openStopDetail } from '../../services/stopNav';
 import {
   getApiKey,
   getFavorites,
   getRecentStops,
+  isStaleDirection,
   moveFavorite,
   removeFavorite,
   renameFavorite,
@@ -75,6 +77,25 @@ export default function StopsScreen() {
   useEffect(() => {
     void getFavorites().then(setFavorites);
   }, [fav.keys]);
+
+  // 예전 버전이 저장한 추정 방면(예: "서쪽 방향 (위치로 추정)")은 실제 방면으로 다시 확인
+  const refreshing$ = useRef(false);
+  useEffect(() => {
+    const stale = favorites.filter((f) => isStaleDirection(f.directionLabel));
+    if (!stale.length || refreshing$.current || !hasKey) return;
+    refreshing$.current = true;
+    void (async () => {
+      for (const f of stale) {
+        try {
+          await resolveDirection(f.stop);
+        } catch {
+          // 다음 기회에
+        }
+      }
+      setFavorites(await getFavorites());
+      refreshing$.current = false;
+    })();
+  }, [favorites, hasKey]);
 
   const remove = (f: FavoriteStop) =>
     Alert.alert('즐겨찾기 삭제', `${f.nickname || f.stop.stopName}을(를) 즐겨찾기에서 뺄까요?`, [
@@ -224,7 +245,12 @@ export default function StopsScreen() {
 
           {favorites.map((f, i) => {
             const title = f.nickname || f.stop.stopName;
-            const sub = [f.nickname ? f.stop.stopName : '', f.directionLabel ? `→ ${f.directionLabel}` : '', REGION_LABELS[f.stop.region]]
+            const dirOk = !isStaleDirection(f.directionLabel);
+            const sub = [
+              f.nickname ? f.stop.stopName : '',
+              dirOk ? `→ ${f.directionLabel}` : '방면 확인 중…',
+              REGION_LABELS[f.stop.region],
+            ]
               .filter(Boolean)
               .join(' · ');
             return (
@@ -307,7 +333,9 @@ export default function StopsScreen() {
                       <Text style={{ color: t.text, fontWeight: '700' }} numberOfLines={1}>
                         {r.stop.stopName}
                       </Text>
-                      {r.directionLabel ? <Muted numberOfLines={1}>→ {r.directionLabel}</Muted> : null}
+                      {r.directionLabel && !isStaleDirection(r.directionLabel) ? (
+                        <Muted numberOfLines={1}>→ {r.directionLabel}</Muted>
+                      ) : null}
                     </View>
                     <Pressable onPress={() => void fav.toggle(r.stop, r.directionLabel)} hitSlop={12} style={{ paddingHorizontal: 6 }}>
                       <Icon name={fav.keys.has(r.key) ? 'star' : 'star-outline'} size={22} color={fav.keys.has(r.key) ? '#F5B301' : t.sub} />
