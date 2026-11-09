@@ -1,7 +1,7 @@
 /**
  * 정류장 탭 (첫 화면)
- *  1) 가까운 정류장 (현재 위치 기준, 가까운 순) → ☆ 로 이름 붙여 즐겨찾기
- *  2) 즐겨찾기 정류장: 이름 · 정류장명 · 방면 + 곧 오는 버스
+ *  1) 즐겨찾기 정류장: 이름 · 정류장명 · 방면 + 곧 오는 버스
+ *  2) 가까운 정류장 (현재 위치 기준, 가까운 순) → ☆ 로 이름 붙여 즐겨찾기
  *  3) 최근 본 정류장
  */
 import { router, useFocusEffect } from 'expo-router';
@@ -159,70 +159,6 @@ export default function StopsScreen() {
             </Card>
           ) : null}
 
-          {/* ── 가까운 정류장 ── */}
-          <SectionTitle
-            right={
-              <Pressable onPress={() => void nearby.load(true)} hitSlop={10} disabled={nearby.loading}>
-                {nearby.loading ? <ActivityIndicator size="small" /> : <Icon name="refresh" size={18} color={t.primary} />}
-              </Pressable>
-            }
-          >
-            📍 가까운 정류장
-          </SectionTitle>
-          <Card style={{ paddingVertical: 4 }}>
-            {nearby.needsPermission ? (
-              <View style={{ paddingVertical: 12 }}>
-                <Muted style={{ marginBottom: 10 }}>현재 위치를 허용하면 가까운 정류장을 바로 보여 드립니다.</Muted>
-                <Button title="위치 권한 허용" icon="location" small onPress={() => void nearby.load(true)} />
-              </View>
-            ) : nearby.error ? (
-              <Muted style={{ paddingVertical: 12, color: t.danger }}>{nearby.error}</Muted>
-            ) : nearby.stops.length === 0 ? (
-              [0, 1, 2].map((i) => <View key={i} style={[styles.skeleton, { backgroundColor: t.chip }]} />)
-            ) : (
-              nearby.stops.map((s, i) => {
-                const k = stopKeyOf(s);
-                const d = dirText(nearby.directions[k]);
-                const on = fav.keys.has(k);
-                return (
-                  <Pressable
-                    key={k}
-                    onPress={() => {
-                      const dd = nearby.directions[k];
-                      openStopDetail(s, dd && typeof dd === 'object' ? dd.label : '');
-                    }}
-                    style={[styles.nearRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.border }]}
-                  >
-                    <View style={[styles.distBadge, { backgroundColor: t.primarySoft }]}>
-                      <Text style={{ color: t.primary, fontWeight: '900', fontSize: 12 }}>{formatDist(s.distanceM)}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: t.text, fontWeight: '800', fontSize: 15.5 }} numberOfLines={1}>
-                        {s.stopName}
-                      </Text>
-                      {d.text ? (
-                        <Text style={{ color: d.muted ? t.sub : t.primary, fontWeight: d.muted ? '500' : '700', fontSize: 13 }} numberOfLines={1}>
-                          {d.text}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <Pressable onPress={() => toggleNearbyFav(s)} hitSlop={12} style={{ paddingHorizontal: 6 }} accessibilityLabel="즐겨찾기">
-                      <Icon name={on ? 'star' : 'star-outline'} size={24} color={on ? '#F5B301' : t.sub} />
-                    </Pressable>
-                  </Pressable>
-                );
-              })
-            )}
-            {nearby.stops.length > 0 ? (
-              <Pressable
-                onPress={() => router.push({ pathname: '/stop-picker', params: { purpose: 'view' } })}
-                style={[styles.more, { borderColor: t.border }]}
-              >
-                <Text style={{ color: t.primary, fontWeight: '800' }}>지도에서 더 보기 ›</Text>
-              </Pressable>
-            ) : null}
-          </Card>
-
           {/* ── 즐겨찾기 ── */}
           <SectionTitle
             right={
@@ -241,7 +177,7 @@ export default function StopsScreen() {
               <EmptyState
                 icon="star-outline"
                 title="즐겨찾기한 정류장이 없습니다"
-                body={'위 가까운 정류장이나 검색 결과에서 ☆ 를 누르면\n이름을 붙여 저장하고, 곧 오는 버스를 바로 볼 수 있습니다.'}
+                body={'아래 가까운 정류장이나 검색 결과에서 ☆ 를 누르면\n이름을 붙여 저장하고, 곧 오는 버스를 바로 볼 수 있습니다.'}
               />
             </Card>
           ) : null}
@@ -319,6 +255,70 @@ export default function StopsScreen() {
               </Card>
             );
           })}
+
+          {/* ── 가까운 정류장 ── */}
+          <SectionTitle
+            right={
+              <Pressable onPress={() => void nearby.load(true)} hitSlop={10} disabled={nearby.loading}>
+                {nearby.loading ? <ActivityIndicator size="small" /> : <Icon name="refresh" size={18} color={t.primary} />}
+              </Pressable>
+            }
+          >
+            📍 가까운 정류장
+          </SectionTitle>
+          <Card style={{ paddingVertical: 4 }}>
+            {nearby.needsPermission ? (
+              <View style={{ paddingVertical: 12 }}>
+                <Muted style={{ marginBottom: 10 }}>현재 위치를 허용하면 가까운 정류장을 바로 보여 드립니다.</Muted>
+                <Button title="위치 권한 허용" icon="location" small onPress={() => void nearby.load(true)} />
+              </View>
+            ) : nearby.error ? (
+              <Muted style={{ paddingVertical: 12, color: t.danger }}>{nearby.error}</Muted>
+            ) : nearby.stops.length === 0 ? (
+              [0, 1, 2].map((i) => <View key={i} style={[styles.skeleton, { backgroundColor: t.chip }]} />)
+            ) : (
+              nearby.stops.map((s, i) => {
+                const k = stopKeyOf(s);
+                const d = dirText(nearby.directions[k]);
+                const on = fav.keys.has(k);
+                return (
+                  <Pressable
+                    key={k}
+                    onPress={() => {
+                      const dd = nearby.directions[k];
+                      openStopDetail(s, dd && typeof dd === 'object' ? dd.label : '');
+                    }}
+                    style={[styles.nearRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.border }]}
+                  >
+                    <View style={[styles.distBadge, { backgroundColor: t.primarySoft }]}>
+                      <Text style={{ color: t.primary, fontWeight: '900', fontSize: 12 }}>{formatDist(s.distanceM)}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: t.text, fontWeight: '800', fontSize: 15.5 }} numberOfLines={1}>
+                        {s.stopName}
+                      </Text>
+                      {d.text ? (
+                        <Text style={{ color: d.muted ? t.sub : t.primary, fontWeight: d.muted ? '500' : '700', fontSize: 13 }} numberOfLines={1}>
+                          {d.text}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Pressable onPress={() => toggleNearbyFav(s)} hitSlop={12} style={{ paddingHorizontal: 6 }} accessibilityLabel="즐겨찾기">
+                      <Icon name={on ? 'star' : 'star-outline'} size={24} color={on ? '#F5B301' : t.sub} />
+                    </Pressable>
+                  </Pressable>
+                );
+              })
+            )}
+            {nearby.stops.length > 0 ? (
+              <Pressable
+                onPress={() => router.push({ pathname: '/stop-picker', params: { purpose: 'view' } })}
+                style={[styles.more, { borderColor: t.border }]}
+              >
+                <Text style={{ color: t.primary, fontWeight: '800' }}>지도에서 더 보기 ›</Text>
+              </Pressable>
+            ) : null}
+          </Card>
 
           {/* ── 최근 본 정류장 ── */}
           {recent.length > 0 ? (
