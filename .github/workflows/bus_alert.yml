@@ -1,15 +1,8 @@
 name: Multi-Region Bus Arrival Notifier (Daejeon / Seongnam / Seoul)
 
+# 텔레그램 자동 알림은 앱으로 옮겨서 꺼 둠 (push · 예약 실행 없음).
+# 필요할 때는 Actions 탭에서 수동 실행(workflow_dispatch)만 가능.
 on:
-  push:
-    branches:
-      - main
-      - master
-  schedule:
-    # 대기열 지연을 고려해 일찍 진입 (UTC 21:30 = KST 06:30)
-    - cron: '00 17 * * *'
-    # 첫 크론 누락 시 백업 실행 (UTC 22:00 = KST 07:00)
-    - cron: '00 18 * * *'
   workflow_dispatch:
     inputs:
       run_once_now:
