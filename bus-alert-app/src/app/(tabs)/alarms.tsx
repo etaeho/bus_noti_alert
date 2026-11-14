@@ -197,6 +197,18 @@ export default function AlarmsScreen() {
           </Card>
         ))}
 
+        {!ride?.active ? (
+          <Card style={{ paddingVertical: 4 }}>
+            <ListRow
+              icon="flag-outline"
+              title="하차 알림"
+              subtitle="버스에 탄 뒤 내릴 정류장 몇 정거장 전에 알려 드려요"
+              onPress={() => router.push('/ride')}
+              last
+            />
+          </Card>
+        ) : null}
+
         <SectionTitle
           right={
             alarms.length ? (

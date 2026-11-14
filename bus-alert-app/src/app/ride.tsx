@@ -6,17 +6,16 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { HeroHeader } from '../../components/HeroHeader';
-import { LiveArrivals } from '../../components/LiveArrivals';
-import { Button, Card, Chip, Field, Label, Muted, SectionTitle, ToggleRow, useTheme } from '../../components/ui';
-import { formatArrSec } from '../../core/format';
-import { REGION_LABELS, type RideAlert, type RideRuntimeState } from '../../core/types';
-import { requestLocationPermissions } from '../../services/background';
-import { ensureNotificationPermission } from '../../services/notify';
-import { displayStopName, takePickedStop } from '../../services/pickerStore';
-import { runMonitorTick } from '../../services/monitor';
-import { applyMonitoringChanges } from '../../services/runtime';
-import { getAlarms, getRide, getRideState, saveRide, saveRideState } from '../../services/storage';
+import { LiveArrivals } from '../components/LiveArrivals';
+import { Button, Card, Chip, Field, Label, Muted, SectionTitle, ToggleRow, useTheme } from '../components/ui';
+import { formatArrSec } from '../core/format';
+import { REGION_LABELS, type RideAlert, type RideRuntimeState } from '../core/types';
+import { requestLocationPermissions } from '../services/background';
+import { ensureNotificationPermission } from '../services/notify';
+import { displayStopName, takePickedStop } from '../services/pickerStore';
+import { runMonitorTick } from '../services/monitor';
+import { applyMonitoringChanges } from '../services/runtime';
+import { getAlarms, getRide, getRideState, saveRide, saveRideState } from '../services/storage';
 
 const STAGES = [5, 4, 3, 2, 1];
 
@@ -141,7 +140,6 @@ export default function RideScreen() {
   if (r.active) {
     return (
       <ScrollView contentContainerStyle={styles.container}>
-        <HeroHeader title="하차" subtitle="내릴 정류장 몇 정거장 전에 알려 드려요" />
         <View style={{ padding: 16 }}>
         <Card>
           <Muted>하차 알림 진행 중</Muted>
@@ -184,10 +182,9 @@ export default function RideScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <HeroHeader title="하차" subtitle="내릴 정류장 몇 정거장 전에 알려 드려요" />
         <View style={{ padding: 16 }}>
-        <Muted style={{ marginBottom: 12 }}>
-          버스에 탄 뒤 내릴 정류장과 노선을 고르고 시작을 누르세요. 내 버스가 내릴 정류장 몇 정거장 전에 왔는지 알려 드립니다.
+        <Muted style={{ marginBottom: 4, marginHorizontal: 4 }}>
+          버스에 탄 뒤 내릴 정류장과 타고 있는 노선을 고르세요. 내리기 몇 정거장 전에 알려 드립니다.
         </Muted>
 
         <SectionTitle>① 내릴 정류장 · 타고 있는 노선</SectionTitle>
@@ -216,7 +213,7 @@ export default function RideScreen() {
           />
 
           <View style={{ height: 14 }} />
-          <Label>타고 있는 버스 노선</Label>
+          <Label hint="위 목록에서 누르거나 직접 입력">타고 있는 버스</Label>
           <Field value={r.routeNo} onChangeText={(v) => set({ routeNo: v })} placeholder="예: 311" autoCapitalize="characters" />
           {routes.length > 0 && (
             <View style={[styles.wrap, { marginTop: 8 }]}>

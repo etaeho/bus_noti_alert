@@ -74,7 +74,6 @@ export default function TabsLayout() {
           tabBarIcon: icon('notifications', 'notifications-outline'),
         }}
       />
-      <Tabs.Screen name="ride" options={{ title: '하차', tabBarIcon: icon('flag', 'flag-outline') }} />
       <Tabs.Screen name="alarms" options={{ title: '알림 설정', tabBarIcon: icon('alarm', 'alarm-outline') }} />
       <Tabs.Screen name="settings" options={{ title: '설정', tabBarIcon: icon('settings', 'settings-outline') }} />
     </Tabs>

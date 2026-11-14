@@ -23,6 +23,7 @@ export default function RootLayout() {
         <Stack.Screen name="alarm/[id]" options={{ title: '버스 알림 설정' }} />
         <Stack.Screen name="stop-picker" options={{ title: '정류장 선택' }} />
         <Stack.Screen name="stop/view" options={{ title: '정류장' }} />
+        <Stack.Screen name="ride" options={{ title: '하차 알림' }} />
       </Stack>
     </>
   );

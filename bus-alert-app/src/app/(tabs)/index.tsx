@@ -28,12 +28,15 @@ import { StopMap, type MapStop, type StopMapHandle } from '../../components/Stop
 import { Button, Icon, useTheme } from '../../components/ui';
 import { useFavorites } from '../../components/useFavorites';
 import { distanceM } from '../../core/decide';
-import type { StopCandidate, StopDirection } from '../../core/types';
+import type { RideAlert, RideRuntimeState, StopCandidate, StopDirection } from '../../core/types';
 import { resolveDirection } from '../../services/directionCache';
+import { setPickedStop } from '../../services/pickerStore';
 import { openStopDetail } from '../../services/stopNav';
 import {
   getApiKey,
   getFavorites,
+  getRide,
+  getRideState,
   isStaleDirection,
   moveFavorite,
   removeFavorite,
@@ -72,12 +75,16 @@ export default function StopsScreen() {
   const [dir, setDir] = useState<StopDirection | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [areaH, setAreaH] = useState(0);
+  const [ride, setRide] = useState<RideAlert | null>(null);
+  const [rideSt, setRideSt] = useState<RideRuntimeState | null>(null);
 
   // ── 데이터 ──
   const load = useCallback(async () => {
-    const [f, k] = await Promise.all([getFavorites(), getApiKey()]);
+    const [f, k, rd, rds] = await Promise.all([getFavorites(), getApiKey(), getRide(), getRideState()]);
     setFavorites(f);
     setHasKey(!!k);
+    setRide(rd);
+    setRideSt(rds);
     await fav.refresh();
   }, [fav]);
 
@@ -99,6 +106,17 @@ export default function StopsScreen() {
   useEffect(() => {
     void getFavorites().then(setFavorites);
   }, [fav.keys]);
+
+  // 하차 알림 진행 중이면 남은 정거장 갱신
+  useEffect(() => {
+    if (!ride?.active) return;
+    const id = setInterval(async () => {
+      const [rd, rds] = await Promise.all([getRide(), getRideState()]);
+      setRide(rd);
+      setRideSt(rds);
+    }, 5000);
+    return () => clearInterval(id);
+  }, [ride?.active]);
 
   // 예전 버전이 저장한 추정 방면은 실제 방면으로 다시 확인
   const refreshingDirs = useRef(false);
@@ -334,6 +352,25 @@ export default function StopsScreen() {
         </Pressable>
       </View>
 
+      {/* 하차 알림 진행 중 */}
+      {ride?.active ? (
+        <Pressable
+          onPress={() => router.push('/ride')}
+          style={[styles.rideBanner, styles.float, { top: insets.top + 70, backgroundColor: t.text }]}
+          accessibilityRole="button"
+          accessibilityLabel="하차 알림 보기"
+        >
+          <Icon name="flag" size={16} color={t.card} />
+          <Text style={[styles.rideText, { color: t.card }]} numberOfLines={1}>
+            {ride.routeNo}번 · {ride.stopName || ride.stopNo}
+          </Text>
+          <Text style={[styles.rideCnt, { color: t.card }]}>
+            {rideSt?.lastCnt != null ? (rideSt.lastCnt <= 0 ? '곧 도착' : `${rideSt.lastCnt}정거장 전`) : '확인 중'}
+          </Text>
+          <Icon name="chevron-forward" size={16} color={t.card} />
+        </Pressable>
+      ) : null}
+
       {/* 내 위치 */}
       <Animated.View
         style={[styles.myLoc, { top: collapsedTop - 60, opacity: y.interpolate({ inputRange: [0, Math.max(1, travel)], outputRange: [0, 1] }) }]}
@@ -462,6 +499,30 @@ export default function StopsScreen() {
                       </Text>
                       <Pressable onPress={() => openStopDetail(selected.stop, dirLabel)} hitSlop={8}>
                         <Text style={{ color: t.primary, fontWeight: '700', fontSize: 13 }}>정류장 자세히</Text>
+                      </Pressable>
+                    </View>
+                    <View style={styles.actions}>
+                      <Pressable
+                        onPress={() => {
+                          setPickedStop('alarm', { stop: selected.stop, direction: dir });
+                          router.push('/alarm/new');
+                        }}
+                        style={({ pressed }) => [styles.action, { backgroundColor: t.primarySoft, opacity: pressed ? 0.7 : 1 }]}
+                        accessibilityRole="button"
+                      >
+                        <Icon name="alarm-outline" size={18} color={t.primary} />
+                        <Text style={[styles.actionText, { color: t.primary }]}>도착 알림 만들기</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => {
+                          if (!ride?.active) setPickedStop('ride', { stop: selected.stop, direction: dir });
+                          router.push('/ride');
+                        }}
+                        style={({ pressed }) => [styles.action, { backgroundColor: t.chip, opacity: pressed ? 0.7 : 1, marginLeft: 8 }]}
+                        accessibilityRole="button"
+                      >
+                        <Icon name="flag-outline" size={18} color={t.text} />
+                        <Text style={[styles.actionText, { color: t.text }]}>{ride?.active ? '하차 알림 보기' : '여기서 내리기'}</Text>
                       </Pressable>
                     </View>
                   </>
@@ -614,12 +675,27 @@ const styles = StyleSheet.create({
   stopSub: { fontSize: 13, marginTop: 1 },
   starBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginLeft: 10 },
   chips: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 6 },
-  chip: { flexDirection: 'row', alignItems: 'center', height: 34, paddingHorizontal: 14, borderRadius: 17, marginRight: 8 },
+  chip: { flexDirection: 'row', alignItems: 'center', height: 40, paddingHorizontal: 16, borderRadius: 20, marginRight: 8 },
   chipText: { fontSize: 13.5, maxWidth: 140 },
   notice: { borderRadius: 14, padding: 14, marginTop: 8 },
   footRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
   nearRow: { flexDirection: 'row', alignItems: 'center', minHeight: 60, paddingVertical: 8 },
   pinDot: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   skeleton: { height: 50, borderRadius: 10, marginVertical: 6 },
+  rideBanner: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    height: 44,
+    borderRadius: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  rideText: { flex: 1, fontSize: 14, fontWeight: '600', marginLeft: 8 },
+  rideCnt: { fontSize: 14, fontWeight: '800', marginRight: 4, fontVariant: ['tabular-nums'] },
+  actions: { flexDirection: 'row', marginTop: 14 },
+  action: { flex: 1, height: 48, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  actionText: { fontSize: 14.5, fontWeight: '700', marginLeft: 6 },
   moreBtn: { alignItems: 'center', justifyContent: 'center', height: 46, borderRadius: 14, marginTop: 14 },
 });
