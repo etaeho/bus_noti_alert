@@ -1,0 +1,175 @@
+name: 버스 알리미 앱 - Android APK
+
+# bus-alert-app/ 을 수정해서 어느 브랜치든 push 하면 APK 를 빌드해서
+#  1) Actions 아티팩트로 올리고
+#  2) "app-dev" 프리릴리스에 bus-alert.apk 로 덮어써서
+#     폰에서 고정 링크로 바로 받을 수 있게 한다:
+#     https://github.com/etaeho/bus_noti_alert/releases/download/app-dev/bus-alert.apk
+# 게시 전에 에뮬레이터에서 실제로 실행해 보고, 크래시가 나면 게시하지 않는다.
+# (Expo 계정 불필요 - GitHub Actions 에서 직접 Gradle 빌드)
+
+on:
+  push:
+    paths:
+      - 'bus-alert-app/**'
+      - '.github/workflows/app_android_apk.yml'
+      - '.github/scripts/app_smoke_test.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bus-alert-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: bus-alert-app
+    env:
+      # 선택: 저장소 Secrets 에 등록하면 Google 지도 사용 (없으면 기본 지도)
+      GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: bus-alert-app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          # 기본 브랜치가 아니어도 캐시를 저장해서 다음 빌드를 빠르게
+          cache-read-only: false
+
+      - name: Google 지도 키 확인
+        run: |
+          if [ -n "$GOOGLE_MAPS_API_KEY" ]; then
+            echo "✅ GOOGLE_MAPS_API_KEY 등록됨 (${#GOOGLE_MAPS_API_KEY}자) → Google 지도로 빌드합니다"
+            echo "- 🗺️ 지도: Google 지도" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::GOOGLE_MAPS_API_KEY 가 없어 기본 지도(OpenStreetMap/CARTO)로 빌드합니다"
+            echo "- 🗺️ 지도: 기본 지도 (GOOGLE_MAPS_API_KEY 미등록)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: 타입 검사 · 테스트
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Android 네이티브 프로젝트 생성 (expo prebuild)
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - name: Release APK 빌드
+        run: |
+          export EXPO_PUBLIC_BUILD_INFO="빌드 #${GITHUB_RUN_NUMBER} · ${GITHUB_REF_NAME} · ${GITHUB_SHA::7}"
+          cd android
+          chmod +x gradlew
+          # 폰(arm64) + 에뮬레이터 실행 검사(x86_64)용. 의존성 다운로드 타임아웃 대비 최대 3회 시도
+          GRADLE_NET="-Dorg.gradle.internal.http.socketTimeout=180000 -Dorg.gradle.internal.http.connectionTimeout=180000 -Dorg.gradle.internal.repository.max.retries=6 -Dorg.gradle.internal.repository.initial.backoff=2000"
+          for attempt in 1 2 3; do
+            if ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,x86_64 $GRADLE_NET; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            echo "::warning::Gradle 빌드 실패 (시도 $attempt) — 30초 후 재시도"
+            sleep 30
+          done
+          cp app/build/outputs/apk/release/app-release.apk ../bus-alert.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bus-alert-apk
+          path: bus-alert-app/bus-alert.apk
+
+  smoke-test:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bus-alert-apk
+
+      - name: KVM 활성화
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: 에뮬레이터에서 실행 검사
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash .github/scripts/app_smoke_test.sh bus-alert.apk
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-test-logs
+          path: smoke/
+
+      - name: 결과 판정
+        run: |
+          RESULT=$(cat smoke/result 2>/dev/null || echo FAIL)
+          {
+            echo "## 🧪 에뮬레이터 실행 검사: $RESULT"
+            echo ""
+            echo '```'
+            tail -60 smoke/errors.txt 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$RESULT" = PASS ]
+
+  publish:
+    needs: smoke-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bus-alert-apk
+
+      - name: '"app-dev" 프리릴리스에 게시'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="브랜치: ${GITHUB_REF_NAME}
+          커밋: ${GITHUB_SHA::7} — $(git log -1 --pretty=%s)
+          빌드 #${GITHUB_RUN_NUMBER}
+
+          폰에서 아래 링크로 설치:
+          https://github.com/${GITHUB_REPOSITORY}/releases/download/app-dev/bus-alert.apk"
+          gh release delete app-dev --yes --cleanup-tag || true
+          gh release create app-dev bus-alert.apk \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "버스 알리미 개발 빌드 #${GITHUB_RUN_NUMBER} (${GITHUB_REF_NAME})" \
+            --notes "$NOTES"
+          {
+            echo "## 📱 버스 알리미 APK"
+            echo ""
+            echo "- 설치 링크: https://github.com/${GITHUB_REPOSITORY}/releases/download/app-dev/bus-alert.apk"
+            echo "- 커밋: ${GITHUB_SHA::7} — $(git log -1 --pretty=%s)"
+          } >> "$GITHUB_STEP_SUMMARY"
