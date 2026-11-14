@@ -19,7 +19,7 @@ import {
 
 import { LiveArrivals } from '../components/LiveArrivals';
 import { StopMap, type MapStop, type StopMapHandle } from '../components/StopMap';
-import { Button, Chip, Muted, useTheme } from '../components/ui';
+import { Button, Chip, Icon, Muted, useTheme } from '../components/ui';
 import { distanceM } from '../core/decide';
 import { nearbyStops, regionFromAddress, searchStopsByName } from '../core/busApi';
 import { REGION_LABELS, type Region, type StopCandidate, type StopDirection } from '../core/types';
@@ -221,7 +221,6 @@ export default function StopPickerScreen() {
       >
         <View style={{ flex: 1 }}>
           <Text style={[styles.itemTitle, { color: t.text }]}>
-            {favKeys.has(stopKeyOf(item)) ? '⭐ ' : '🚏 '}
             {item.stopName}
           </Text>
           {d === 'loading' || d === undefined ? (
@@ -240,7 +239,8 @@ export default function StopPickerScreen() {
             </Text>
           ) : null}
         </View>
-        {isSel ? <Text style={{ color: t.primary, fontSize: 20 }}>✓</Text> : null}
+        {favKeys.has(stopKeyOf(item)) ? <Icon name="star" size={18} color="#FFB800" style={{ marginLeft: 6 }} /> : null}
+        {isSel ? <Icon name="checkmark-circle" size={22} color={t.primary} style={{ marginLeft: 6 }} /> : null}
       </Pressable>
     );
   };
@@ -293,7 +293,8 @@ export default function StopPickerScreen() {
         />
         <View style={styles.mapButtons}>
           <Button
-            title="📍 이 지역 정류장 찾기"
+            title="이 지역 정류장 찾기"
+            icon="locate"
             variant="secondary"
             onPress={() => {
               const c = mapRef.current?.getCenter() ?? me;
@@ -358,7 +359,9 @@ export default function StopPickerScreen() {
           </ScrollView>
           <View style={{ flexDirection: 'row', marginTop: 8 }}>
             <Button
-              title={favKeys.has(stopKeyOf(selectedStop)) ? '★' : '☆'}
+              title=""
+              accessibilityLabel={favKeys.has(stopKeyOf(selectedStop)) ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+              icon={favKeys.has(stopKeyOf(selectedStop)) ? 'star' : 'star-outline'}
               variant="secondary"
               onPress={() => void toggleFav(selectedStop)}
               style={{ marginRight: 8, paddingHorizontal: 18 }}

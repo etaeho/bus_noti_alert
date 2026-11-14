@@ -114,7 +114,7 @@ export default function SettingsScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <HeroHeader title="설정" subtitle="API 키 · 권한 · 백그라운드" />
+        <HeroHeader title="설정" />
         <View style={{ padding: 16 }}>
         <SectionTitle>공공데이터 API 키</SectionTitle>
         <Card>

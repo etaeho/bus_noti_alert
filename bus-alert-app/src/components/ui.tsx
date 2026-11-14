@@ -4,7 +4,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { type ComponentProps, type ReactNode } from 'react';
 import {
-  Platform,
   Pressable,
   StyleSheet,
   Switch,
@@ -21,33 +20,33 @@ import {
 import type { TimeOfDay } from '../core/types';
 
 const light = {
-  bg: '#F2F4F8',
+  bg: '#F2F3F5',
   card: '#FFFFFF',
-  text: '#111827',
-  sub: '#6B7280',
-  border: '#E5E7EB',
-  primary: '#2563EB',
-  primarySoft: '#E8EFFE',
+  text: '#111418',
+  sub: '#6E7681',
+  border: '#E4E6EA',
+  primary: '#2F6BFF',
+  primarySoft: '#EAF0FF',
   primaryText: '#FFFFFF',
-  danger: '#DC2626',
+  danger: '#E5484D',
   dangerSoft: '#FDECEC',
   success: '#16A34A',
   successSoft: '#E7F6EC',
   warning: '#D97706',
   warningSoft: '#FDF3E1',
-  chip: '#EEF2F7',
-  inputBg: '#F7F8FA',
-  shadow: '#0F172A',
-  heroBg: '#1D4ED8',
+  chip: '#EEF0F3',
+  inputBg: '#F2F3F5',
+  shadow: '#111418',
+  heroBg: '#F2F3F5',
 };
 const dark: typeof light = {
-  bg: '#0B0F17',
-  card: '#151B26',
-  text: '#F1F4F9',
-  sub: '#98A2B3',
-  border: '#263042',
-  primary: '#5B8DEF',
-  primarySoft: '#1B2A47',
+  bg: '#000000',
+  card: '#1C1C1E',
+  text: '#F5F5F7',
+  sub: '#A1A1A8',
+  border: '#2C2C2E',
+  primary: '#5B8DFF',
+  primarySoft: '#1A2540',
   primaryText: '#FFFFFF',
   danger: '#F26B6B',
   dangerSoft: '#3A1E22',
@@ -55,10 +54,10 @@ const dark: typeof light = {
   successSoft: '#17321F',
   warning: '#F0A43A',
   warningSoft: '#3A2C14',
-  chip: '#1E2635',
-  inputBg: '#101520',
+  chip: '#2C2C2E',
+  inputBg: '#2C2C2E',
   shadow: '#000000',
-  heroBg: '#15244A',
+  heroBg: '#000000',
 };
 export type Theme = typeof light;
 export type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -74,10 +73,10 @@ export function Icon({ name, size = 20, color, style }: { name: IconName; size?:
 
 export function Card({ children, style, onPress }: { children: ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void }) {
   const t = useTheme();
-  const base = [styles.card, { backgroundColor: t.card, shadowColor: t.shadow, borderColor: t.border }, style];
+  const base = [styles.card, { backgroundColor: t.card }, style];
   if (onPress) {
     return (
-      <Pressable onPress={onPress} style={({ pressed }) => [base, pressed && { opacity: 0.85 }]}>
+      <Pressable onPress={onPress} style={({ pressed }) => [base, pressed && { opacity: 0.7 }]}>
         {children}
       </Pressable>
     );
@@ -124,8 +123,10 @@ export function Button({
   style,
   icon,
   small,
+  accessibilityLabel,
 }: {
   title: string;
+  accessibilityLabel?: string;
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
   disabled?: boolean;
@@ -140,6 +141,7 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
       onPress={onPress}
       disabled={disabled}
       style={({ pressed }) => [
@@ -149,8 +151,8 @@ export function Button({
         style,
       ]}
     >
-      {icon ? <Ionicons name={icon} size={small ? 16 : 18} color={fg} style={{ marginRight: 6 }} /> : null}
-      <Text style={[styles.buttonText, small && { fontSize: 14 }, { color: fg }]}>{title}</Text>
+      {icon ? <Ionicons name={icon} size={small ? 16 : 18} color={fg} style={title ? { marginRight: 6 } : undefined} /> : null}
+      {title ? <Text style={[styles.buttonText, small && { fontSize: 14 }, { color: fg }]}>{title}</Text> : null}
     </Pressable>
   );
 }
@@ -162,9 +164,9 @@ export function Chip({ label, selected, onPress }: { label: string; selected: bo
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      style={[styles.chip, { backgroundColor: selected ? t.primary : t.chip, borderColor: selected ? t.primary : t.border }]}
+      style={[styles.chip, { backgroundColor: selected ? t.text : t.chip }]}
     >
-      <Text style={{ color: selected ? t.primaryText : t.text, fontWeight: '600' }}>{label}</Text>
+      <Text style={{ color: selected ? t.card : t.text, fontWeight: selected ? '700' : '600', fontSize: 13.5 }}>{label}</Text>
     </Pressable>
   );
 }
@@ -200,8 +202,8 @@ export function Pill({
 export function RouteBadge({ route, active }: { route: string; active?: boolean }) {
   const t = useTheme();
   return (
-    <View style={[styles.routeBadge, { backgroundColor: active ? t.primary : t.primarySoft }]}>
-      <Text style={{ color: active ? t.primaryText : t.primary, fontWeight: '800', fontSize: 14 }}>{route}</Text>
+    <View style={[styles.routeBadge, { backgroundColor: active ? t.primary : t.chip }]}>
+      <Text style={{ color: active ? t.primaryText : t.text, fontWeight: '800', fontSize: 14, fontVariant: ['tabular-nums'] }}>{route}</Text>
     </View>
   );
 }
@@ -273,7 +275,7 @@ export function Fab({ onPress, label, icon = 'add' }: { onPress: () => void; lab
       style={({ pressed }) => [styles.fab, { backgroundColor: t.primary, shadowColor: t.shadow, opacity: pressed ? 0.85 : 1 }]}
     >
       <Ionicons name={icon} size={22} color={t.primaryText} />
-      <Text style={{ color: t.primaryText, fontWeight: '800', marginLeft: 6, fontSize: 15 }}>{label}</Text>
+      <Text style={{ color: t.primaryText, fontWeight: '700', marginLeft: 6, fontSize: 15 }}>{label}</Text>
     </Pressable>
   );
 }
@@ -381,31 +383,26 @@ export function Muted({ children, style, numberOfLines }: { children: ReactNode;
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 18,
+    borderRadius: 14,
     padding: 16,
     marginBottom: 12,
-    borderWidth: Platform.OS === 'android' ? 0 : StyleSheet.hairlineWidth,
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
   },
-  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, marginBottom: 8, marginHorizontal: 4 },
-  section: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
-  label: { fontSize: 15, fontWeight: '700' },
+  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, marginBottom: 6, marginHorizontal: 16 },
+  section: { fontSize: 13, fontWeight: '700' },
+  label: { fontSize: 15, fontWeight: '600' },
   hint: { fontSize: 12.5, marginTop: 2, lineHeight: 17 },
-  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16 },
-  button: { flexDirection: 'row', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
-  buttonSmall: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
-  buttonText: { fontSize: 16, fontWeight: '800' },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1, marginRight: 8, marginBottom: 8 },
+  input: { borderWidth: 0, borderRadius: 11, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16 },
+  button: { flexDirection: 'row', borderRadius: 12, minHeight: 48, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
+  buttonSmall: { minHeight: 36, paddingVertical: 7, paddingHorizontal: 12, borderRadius: 10 },
+  buttonText: { fontSize: 16, fontWeight: '700' },
+  chip: { minHeight: 34, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 17, marginRight: 8, marginBottom: 8 },
   pill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, alignSelf: 'flex-start' },
-  routeBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, marginRight: 6, marginBottom: 6 },
-  listRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
-  iconCircle: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  routeBadge: { minWidth: 44, alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7, marginRight: 6, marginBottom: 6 },
+  listRow: { flexDirection: 'row', alignItems: 'center', minHeight: 52, paddingVertical: 10 },
+  iconCircle: { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   empty: { alignItems: 'center', paddingVertical: 28, paddingHorizontal: 16 },
-  emptyIcon: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-  emptyTitle: { fontSize: 17, fontWeight: '800', marginBottom: 6 },
+  emptyIcon: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  emptyTitle: { fontSize: 17, fontWeight: '700', marginBottom: 6 },
   emptyBody: { fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 14 },
   fab: {
     position: 'absolute',
@@ -416,7 +413,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
     borderRadius: 28,
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.16,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,

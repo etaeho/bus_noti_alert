@@ -86,7 +86,7 @@ export default function StopsScreen() {
       void load();
       // 지도 위에서는 상태 표시줄 아이콘을 어둡게
       setStatusBarStyle('dark');
-      return () => setStatusBarStyle('light');
+      return () => setStatusBarStyle('auto');
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []),
   );

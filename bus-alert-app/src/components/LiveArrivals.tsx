@@ -295,7 +295,7 @@ export function LiveArrivals({
   }
 
   return (
-    <View style={[styles.wrap, { backgroundColor: t.card, shadowColor: t.shadow }]}>
+    <View style={[styles.wrap, { backgroundColor: t.card }]}>
       <View style={styles.header}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <View style={[styles.liveDot, { backgroundColor: error ? t.danger : t.success }]} />
@@ -316,23 +316,19 @@ export function LiveArrivals({
 
 const styles = StyleSheet.create({
   wrap: {
-    borderRadius: 20,
-    padding: 14,
+    borderRadius: 14,
+    padding: 16,
     marginTop: 12,
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
   },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
   liveDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
-  title: { fontSize: 16, fontWeight: '900' },
+  title: { fontSize: 16, fontWeight: '800' },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingRight: 4, borderRadius: 10 },
   bar: { width: 4, alignSelf: 'stretch', borderRadius: 2, marginRight: 10 },
   routeLine: { flexDirection: 'row', alignItems: 'baseline' },
-  routeNo: { fontSize: 19, fontWeight: '900' },
+  routeNo: { fontSize: 19, fontWeight: '800' },
   routeType: { fontSize: 12, fontWeight: '700', marginLeft: 6 },
-  eta: { fontSize: 19, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  eta: { fontSize: 19, fontWeight: '800', fontVariant: ['tabular-nums'] },
   check: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginLeft: 10 },
   skeleton: { height: 44, borderRadius: 10, marginVertical: 5 },
   notice: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, marginVertical: 4 },

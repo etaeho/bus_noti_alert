@@ -92,10 +92,11 @@ export default function AlarmsScreen() {
   const setupDone = setup ? setup.apiKey && setup.notifications && setup.background && alarms.length > 0 : true;
   const today = `${now.getMonth() + 1}월 ${now.getDate()}일 ${'일월화수목금토'[now.getDay()]}요일`;
 
+  const statusLive = !!ride?.active || activeAlarms.length > 0;
   const statusText = ride?.active
-    ? '🚏 하차 알림 중'
+    ? '하차 알림 중'
     : activeAlarms.length
-      ? `● ${activeAlarms.length}개 감시 중`
+      ? `${activeAlarms.length}개 감시 중`
       : alarms.some((a) => a.enabled)
         ? status.running
           ? '대기 중 · 백그라운드 ON'
@@ -117,7 +118,7 @@ export default function AlarmsScreen() {
           />
         }
       >
-        <HeroHeader title="알림 설정" subtitle={today} right={<HeroPill text={statusText} />} />
+        <HeroHeader title="알림 설정" subtitle={today} right={<HeroPill text={statusText} tone={statusLive ? 'live' : 'neutral'} />} />
         <View style={styles.body}>
         {setup && !setupDone ? (
           <Card>
@@ -163,7 +164,7 @@ export default function AlarmsScreen() {
         ) : null}
 
         {ride?.active ? (
-          <Card onPress={() => router.push('/ride')} style={{ borderLeftWidth: 4, borderLeftColor: t.success }}>
+          <Card onPress={() => router.push('/ride')}>
             <View style={styles.rowBetween}>
               <Pill text="하차 알림" tone="success" icon="flag" />
               <Icon name="chevron-forward" color={t.sub} size={18} />
@@ -178,7 +179,7 @@ export default function AlarmsScreen() {
         ) : null}
 
         {activeAlarms.map((a) => (
-          <Card key={`live-${a.id}`} style={{ borderLeftWidth: 4, borderLeftColor: t.primary }}>
+          <Card key={`live-${a.id}`}>
             <View style={styles.rowBetween}>
               <Pill text="지금 감시 중" tone="success" icon="radio" />
               <Muted>~{formatTime(a.windowEnd)}</Muted>
@@ -191,7 +192,7 @@ export default function AlarmsScreen() {
               query={{ region: a.region, stopNo: a.stopNo, stationId: a.stationId, cityCode: a.cityCode, stopName: a.stopName }}
               highlight={a.routes}
               maxRows={4}
-          pinHighlighted
+              pinHighlighted
             />
           </Card>
         ))}
@@ -200,7 +201,7 @@ export default function AlarmsScreen() {
           right={
             alarms.length ? (
               <Pressable onPress={() => router.push('/alarm/new')} hitSlop={10}>
-                <Text style={{ color: t.primary, fontWeight: '800' }}>＋ 추가</Text>
+                <Text style={{ color: t.primary, fontWeight: '700' }}>추가</Text>
               </Pressable>
             ) : null
           }
@@ -281,12 +282,12 @@ export default function AlarmsScreen() {
 
 const styles = StyleSheet.create({
   container: { paddingBottom: 24 },
-  body: { paddingHorizontal: 16, paddingTop: 14 },
+  body: { paddingHorizontal: 16, paddingTop: 8 },
   header: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 14 },
   date: { fontSize: 13, fontWeight: '700' },
-  h1: { fontSize: 28, fontWeight: '900', marginTop: 2 },
-  cardTitle: { fontSize: 17, fontWeight: '800', marginBottom: 2 },
-  big: { fontSize: 30, fontWeight: '900', marginTop: 4 },
+  h1: { fontSize: 28, fontWeight: '800', marginTop: 2 },
+  cardTitle: { fontSize: 17, fontWeight: '700', marginBottom: 2 },
+  big: { fontSize: 30, fontWeight: '800', marginTop: 4, fontVariant: ['tabular-nums'] },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   meta: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   metaText: { marginLeft: 6, fontSize: 14, flex: 1 },

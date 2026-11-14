@@ -38,7 +38,7 @@ export function useFavorites() {
   const prompt = (
     <NamePrompt
       visible={!!pending}
-      title="⭐ 즐겨찾기 이름"
+      title="즐겨찾기 이름"
       message={pending ? `${pending.stop.stopName}${pending.dir ? `\n→ ${pending.dir}` : ''}\n\n비워 두면 정류장 이름으로 저장됩니다.` : ''}
       placeholder={pending?.stop.stopName}
       suggestions={['집 앞', '회사', '학교', '출근길', '퇴근길']}

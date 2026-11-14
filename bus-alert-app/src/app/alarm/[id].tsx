@@ -209,14 +209,15 @@ export default function AlarmEditScreen() {
           <Label>정류장</Label>
           {a.stopName || a.stopNo ? (
             <View style={[styles.stopBox, { borderColor: t.border, backgroundColor: t.inputBg }]}>
-              <Text style={{ color: t.text, fontSize: 16, fontWeight: '700' }}>🚏 {a.stopName || `정류소 ${a.stopNo}`}</Text>
+              <Text style={{ color: t.text, fontSize: 16, fontWeight: '700' }}>{a.stopName || `정류소 ${a.stopNo}`}</Text>
               <Muted>
                 {[REGION_LABELS[a.region], a.stopNo ? `번호 ${a.stopNo}` : ''].filter(Boolean).join(' · ')}
               </Muted>
             </View>
           ) : null}
           <Button
-            title={a.stopName || a.stopNo ? '🔍 정류장 다시 찾기' : '🔍 정류장 이름 검색 / 지도에서 선택'}
+            title={a.stopName || a.stopNo ? '정류장 다시 찾기' : '정류장 검색 · 지도에서 선택'}
+            icon="search"
             variant={a.stopName || a.stopNo ? 'secondary' : 'primary'}
             onPress={() =>
               router.push({

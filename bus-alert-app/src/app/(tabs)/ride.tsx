@@ -141,12 +141,12 @@ export default function RideScreen() {
   if (r.active) {
     return (
       <ScrollView contentContainerStyle={styles.container}>
-        <HeroHeader title="하차 알림" subtitle="내릴 정류장 몇 정거장 전에 알려드려요" />
+        <HeroHeader title="하차" subtitle="내릴 정류장 몇 정거장 전에 알려 드려요" />
         <View style={{ padding: 16 }}>
         <Card>
           <Muted>하차 알림 진행 중</Muted>
           <Text style={[styles.big, { color: t.text }]}>
-            {r.routeNo}번 → 🚏 {r.stopName || r.stopNo}
+            {r.routeNo}번 → {r.stopName || r.stopNo}
           </Text>
           <Text style={[styles.dist, { color: t.primary }]}>
             {rs?.lastCnt != null ? (rs.lastCnt <= 0 ? '곧 도착' : `${rs.lastCnt}정거장 전`) : '버스 확인 중…'}
@@ -184,7 +184,7 @@ export default function RideScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <HeroHeader title="하차 알림" subtitle="내릴 정류장 몇 정거장 전에 알려드려요" />
+        <HeroHeader title="하차" subtitle="내릴 정류장 몇 정거장 전에 알려 드려요" />
         <View style={{ padding: 16 }}>
         <Muted style={{ marginBottom: 12 }}>
           버스에 탄 뒤 내릴 정류장과 노선을 고르고 시작을 누르세요. 내 버스가 내릴 정류장 몇 정거장 전에 왔는지 알려 드립니다.
@@ -194,12 +194,13 @@ export default function RideScreen() {
         <Card>
           {r.stopName || r.stopNo ? (
             <View style={[styles.stopBox, { borderColor: t.border, backgroundColor: t.inputBg }]}>
-              <Text style={{ color: t.text, fontSize: 16, fontWeight: '700' }}>🚏 {r.stopName || `정류소 ${r.stopNo}`}</Text>
+              <Text style={{ color: t.text, fontSize: 16, fontWeight: '700' }}>{r.stopName || `정류소 ${r.stopNo}`}</Text>
               <Muted>{[REGION_LABELS[r.region], r.stopNo ? `번호 ${r.stopNo}` : ''].filter(Boolean).join(' · ')}</Muted>
             </View>
           ) : null}
           <Button
-            title={r.stopName || r.stopNo ? '🔍 정류장 다시 찾기' : '🔍 정류장 이름 검색 / 지도에서 선택'}
+            title={r.stopName || r.stopNo ? '정류장 다시 찾기' : '정류장 검색 · 지도에서 선택'}
+            icon="search"
             variant={r.stopName || r.stopNo ? 'secondary' : 'primary'}
             onPress={() => router.push({ pathname: '/stop-picker', params: { purpose: 'ride' } })}
             style={{ marginTop: 8 }}

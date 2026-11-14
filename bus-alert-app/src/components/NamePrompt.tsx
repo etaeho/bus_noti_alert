@@ -61,7 +61,7 @@ export function NamePrompt({
               <Text style={{ color: t.sub, fontWeight: '800', fontSize: 15 }}>취소</Text>
             </Pressable>
             <Pressable onPress={() => onSubmit(value)} style={styles.btn} hitSlop={8}>
-              <Text style={{ color: t.primary, fontWeight: '900', fontSize: 15 }}>저장</Text>
+              <Text style={{ color: t.primary, fontWeight: '800', fontSize: 15 }}>저장</Text>
             </Pressable>
           </View>
         </View>
@@ -73,7 +73,7 @@ export function NamePrompt({
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 28 },
   box: { borderRadius: 20, padding: 20 },
-  title: { fontSize: 18, fontWeight: '900' },
+  title: { fontSize: 18, fontWeight: '800' },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, marginTop: 14 },
   suggest: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10, gap: 6 },
   chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },

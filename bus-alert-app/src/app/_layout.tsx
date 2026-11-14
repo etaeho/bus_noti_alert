@@ -9,12 +9,12 @@ export default function RootLayout() {
   const t = useTheme();
   return (
     <>
-      <StatusBar style="light" />
+      <StatusBar style="auto" />
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: t.heroBg },
-          headerTintColor: '#FFFFFF',
-          headerTitleStyle: { fontWeight: '800' },
+          headerStyle: { backgroundColor: t.bg },
+          headerTintColor: t.text,
+          headerTitleStyle: { fontWeight: '700', fontSize: 17 },
           headerShadowVisible: false,
           contentStyle: { backgroundColor: t.bg },
         }}

@@ -1,10 +1,12 @@
 /**
- * 탭 화면 상단의 그라데이션 헤더
+ * 탭 화면 상단 큰 제목 (iOS 큰 제목 스타일)
+ *  - 배경은 화면 배경과 같게, 제목은 크고 굵게, 설명은 작은 회색 글씨
  */
-import { LinearGradient } from 'expo-linear-gradient';
 import { type ReactNode } from 'react';
-import { StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { useTheme } from './ui';
 
 export function HeroHeader({
   title,
@@ -18,40 +20,39 @@ export function HeroHeader({
   children?: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
-  const dark = useColorScheme() === 'dark';
+  const t = useTheme();
   return (
-    <LinearGradient
-      colors={dark ? ['#1B2C55', '#0F1A33'] : ['#2563EB', '#1D4ED8']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={[styles.wrap, { paddingTop: insets.top + 14 }]}
-    >
+    <View style={[styles.wrap, { paddingTop: insets.top + 16 }]}>
       <View style={styles.row}>
-        <View style={{ flex: 1 }}>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-          <Text style={styles.title}>{title}</Text>
-        </View>
+        <Text style={[styles.title, { color: t.text }]} accessibilityRole="header" numberOfLines={1}>
+          {title}
+        </Text>
         {right}
       </View>
-      {children ? <View style={{ marginTop: 14 }}>{children}</View> : null}
-    </LinearGradient>
+      {subtitle ? <Text style={[styles.subtitle, { color: t.sub }]}>{subtitle}</Text> : null}
+      {children ? <View style={{ marginTop: 12 }}>{children}</View> : null}
+    </View>
   );
 }
 
-/** 헤더 위에 쓰는 흰색 반투명 배지 */
-export function HeroPill({ text }: { text: string }) {
+/** 제목 옆 상태 배지 */
+export function HeroPill({ text, tone = 'neutral' }: { text: string; tone?: 'neutral' | 'live' }) {
+  const t = useTheme();
+  const live = tone === 'live';
   return (
-    <View style={styles.pill}>
-      <Text style={styles.pillText}>{text}</Text>
+    <View style={[styles.pill, { backgroundColor: live ? t.successSoft : t.chip }]}>
+      {live ? <View style={[styles.dot, { backgroundColor: t.success }]} /> : null}
+      <Text style={[styles.pillText, { color: live ? t.success : t.sub }]}>{text}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: 18, paddingBottom: 18, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
-  row: { flexDirection: 'row', alignItems: 'flex-end' },
-  subtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '700' },
-  title: { color: '#FFFFFF', fontSize: 26, fontWeight: '900', marginTop: 2 },
-  pill: { backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
-  pillText: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
+  wrap: { paddingHorizontal: 20, paddingBottom: 6 },
+  row: { flexDirection: 'row', alignItems: 'center', minHeight: 44 },
+  title: { flex: 1, fontSize: 30, fontWeight: '800', letterSpacing: -0.8 },
+  subtitle: { fontSize: 13.5, marginTop: 2 },
+  pill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
+  dot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
+  pillText: { fontWeight: '700', fontSize: 12 },
 });

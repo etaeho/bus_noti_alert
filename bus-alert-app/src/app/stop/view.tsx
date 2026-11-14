@@ -104,8 +104,8 @@ export default function StopViewScreen() {
       ) : null}
 
       <Card>
-        {fav && nickname ? <Text style={{ color: '#F5B301', fontWeight: '900', marginBottom: 2 }}>⭐ {nickname}</Text> : null}
-        <Text style={[styles.name, { color: t.text }]}>🚏 {stop.stopName}</Text>
+        {fav && nickname ? <Text style={{ color: t.sub, fontWeight: '700', marginBottom: 2 }}>{nickname}</Text> : null}
+        <Text style={[styles.name, { color: t.text }]}>{stop.stopName}</Text>
         {dirLabel ? (
           <Text style={{ color: t.primary, fontWeight: '800', marginTop: 4 }}>→ {dirLabel}</Text>
         ) : null}
@@ -161,6 +161,6 @@ export default function StopViewScreen() {
 
 const styles = StyleSheet.create({
   container: { padding: 16, paddingBottom: 48 },
-  name: { fontSize: 20, fontWeight: '900' },
+  name: { fontSize: 20, fontWeight: '800' },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
 });

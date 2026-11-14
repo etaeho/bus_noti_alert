@@ -83,7 +83,7 @@ export default function HistoryScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <HeroHeader title="알림 기록" subtitle={`받은 알림 ${items.length}건`} />
+      <HeroHeader title="기록" subtitle={`받은 알림 ${items.length}건`} />
       <View style={styles.filters}>
         <Chip label="전체" selected={filter === 'all'} onPress={() => setFilter('all')} />
         <Chip label="버스 도착" selected={filter === 'bus'} onPress={() => setFilter('bus')} />
@@ -121,7 +121,7 @@ export default function HistoryScreen() {
           return (
             <Pressable
               onPress={() => setExpanded(open ? null : item.id)}
-              style={[styles.item, { backgroundColor: t.card, shadowColor: t.shadow }]}
+              style={({ pressed }) => [styles.item, { backgroundColor: t.card, opacity: pressed ? 0.7 : 1 }]}
             >
               <View style={[styles.icon, { backgroundColor: color + '1F' }]}>
                 <Icon name={meta.icon} size={18} color={color} />
@@ -159,19 +159,15 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 0,
   },
-  day: { fontSize: 13, fontWeight: '800', marginTop: 8, marginBottom: 8, marginLeft: 4 },
+  day: { fontSize: 13, fontWeight: '700', marginTop: 12, marginBottom: 6, marginLeft: 16 },
   item: {
     flexDirection: 'row',
     padding: 14,
-    borderRadius: 16,
-    marginBottom: 10,
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+    borderRadius: 14,
+    marginBottom: 8,
   },
-  icon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  icon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   itemTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
-  kind: { fontSize: 12, fontWeight: '800' },
-  title: { fontSize: 15, fontWeight: '800', marginBottom: 2 },
+  kind: { fontSize: 12, fontWeight: '700' },
+  title: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
 });
