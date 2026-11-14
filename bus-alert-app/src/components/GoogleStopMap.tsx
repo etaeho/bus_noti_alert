@@ -30,12 +30,16 @@ export const GoogleStopMap = forwardRef<StopMapHandle, StopMapProps>(function Go
   useEffect(() => {
     if (!ready) return;
     const sel = stops.find((s) => s.id === selectedId);
-    const key = `${stops.map((s) => s.id).join(',')}|${selectedId ?? ''}|${arrowTo ? 'a' : ''}`;
+    const key = `${stops.map((s) => s.id).join(',')}|${selectedId ?? ''}|${arrowTo ? 'a' : ''}|${me ? 'm' : ''}`;
     if (key === lastFitKey.current) return;
     lastFitKey.current = key;
     const coords = sel
       ? [sel, ...(arrowTo ? [arrowTo] : [])].map((p) => ({ latitude: p.latitude, longitude: p.longitude }))
       : stops.map((p) => ({ latitude: p.latitude, longitude: p.longitude }));
+    // 선택 정류장이 내 위치 가까이(800m 이내)면 내 위치도 함께 보이게
+    if (sel && me && Math.hypot((sel.latitude - me.latitude) * 111_000, (sel.longitude - me.longitude) * 89_000) < 800) {
+      coords.push(me);
+    }
     if (!sel && me && coords.length > 1) {
       // 현재 위치 기준 가까운 6곳만 보이게 확대
       const d2 = (p: { latitude: number; longitude: number }) => (p.latitude - me.latitude) ** 2 + (p.longitude - me.longitude) ** 2;
@@ -45,7 +49,7 @@ export const GoogleStopMap = forwardRef<StopMapHandle, StopMapProps>(function Go
     }
     if (coords.length === 0 && me) coords.push(me);
     if (coords.length === 1) {
-      map.current?.animateToRegion({ ...coords[0], latitudeDelta: 0.003, longitudeDelta: 0.003 }, 400);
+      map.current?.animateToRegion({ ...coords[0], latitudeDelta: 0.004, longitudeDelta: 0.004 }, 400);
     } else if (coords.length > 1) {
       map.current?.fitToCoordinates(coords, { edgePadding: { top: 60, right: 60, bottom: 60, left: 60 }, animated: true });
     }
@@ -68,7 +72,16 @@ export const GoogleStopMap = forwardRef<StopMapHandle, StopMapProps>(function Go
           longitudeDelta: sel ? 0.003 : 0.005,
         }}
         mapPadding={{ top: 0, right: 0, bottom: bottomInset, left: 0 }}
-        onMapReady={() => setReady(true)}
+        onMapReady={() => {
+          const s0 = stops.find((s) => s.id === selectedId) ?? me ?? stops[0];
+          if (s0) {
+            map.current?.animateToRegion(
+              { latitude: s0.latitude, longitude: s0.longitude, latitudeDelta: 0.004, longitudeDelta: 0.004 },
+              0,
+            );
+          }
+          setReady(true);
+        }}
         showsUserLocation={!!me}
         showsMyLocationButton={false}
         toolbarEnabled={false}

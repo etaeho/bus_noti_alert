@@ -20,6 +20,8 @@ export function useNearbyStops(limit = 6) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [needsPermission, setNeedsPermission] = useState(false);
+  /** 위치 조회를 한 번이라도 끝냈는지 (성공/실패 무관) */
+  const [attempted, setAttempted] = useState(false);
   const busy = useRef(false);
 
   const load = useCallback(
@@ -75,10 +77,11 @@ export function useNearbyStops(limit = 6) {
       } finally {
         busy.current = false;
         setLoading(false);
+        setAttempted(true);
       }
     },
     [limit],
   );
 
-  return { stops, directions, me, region, loading, error, needsPermission, load };
+  return { stops, directions, me, region, loading, error, needsPermission, attempted, load };
 }

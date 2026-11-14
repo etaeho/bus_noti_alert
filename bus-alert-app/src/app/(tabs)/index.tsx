@@ -139,11 +139,20 @@ export default function StopsScreen() {
   );
 
   // 처음 선택: 첫 즐겨찾기 → 없으면 가장 가까운 정류장
+  // 처음 선택: 내 위치에서 가장 가까운 정류장 → 위치를 못 쓰면 첫 즐겨찾기
+  const userPicked = useRef(false);
   useEffect(() => {
+    if (userPicked.current && selectedKey && allStops.has(selectedKey)) return;
+    if (nearby.stops[0]) {
+      const k = stopKeyOf(nearby.stops[0]);
+      if (k !== selectedKey) setSelectedKey(k);
+      return;
+    }
+    if (!nearby.attempted || nearby.loading) return; // 위치 확인 중에는 기다림
     if (selectedKey && allStops.has(selectedKey)) return;
-    const first = favorites[0]?.key ?? (nearby.stops[0] ? stopKeyOf(nearby.stops[0]) : null);
+    const first = favorites[0]?.key ?? null;
     if (first) setSelectedKey(first);
-  }, [favorites, nearby.stops, selectedKey, allStops]);
+  }, [favorites, nearby.stops, nearby.attempted, nearby.loading, selectedKey, allStops]);
 
   const selected = selectedKey ? allStops.get(selectedKey) : undefined;
   const selectedFav = favorites.find((f) => f.key === selectedKey);
@@ -229,6 +238,7 @@ export default function StopsScreen() {
 
   // ── 동작 ──
   const select = (key: string) => {
+    userPicked.current = true;
     setSelectedKey(key);
     setMode('stop');
     const s = allStops.get(key)?.stop;
@@ -285,7 +295,7 @@ export default function StopsScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: '#E9EDF1' }} onLayout={onLayout}>
       {/* 지도 */}
-      {areaH > 0 ? (
+      {areaH > 0 && (nearby.me || selected || nearby.attempted) ? (
         <View style={StyleSheet.absoluteFill}>
           <StopMap
             ref={mapRef}

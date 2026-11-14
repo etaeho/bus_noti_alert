@@ -81,7 +81,7 @@ window.setData=function(d){
     L.marker(b,{icon:L.divIcon({className:'',html:'<div class="arrow" style="transform:rotate('+(deg-90)+'deg)">&#10148;</div>',iconSize:[22,22],iconAnchor:[11,11]}),interactive:false}).addTo(arrowLayer);
     pts.push(b);
   }
-  var key=JSON.stringify(pts)+'|'+d.selectedId;
+  var key=JSON.stringify(pts)+'|'+d.selectedId+'|'+(d.me?'m':'');
   if(d.fit&&key!==lastKey){
     if(sel&&d.arrowTo){map.fitBounds(L.latLngBounds([[sel.latitude,sel.longitude],[d.arrowTo.latitude,d.arrowTo.longitude]]).pad(0.6),{maxZoom:18,paddingBottomRight:[0,inset]})}
     else if(sel){map.setView([sel.latitude,sel.longitude],17,{animate:false});if(inset)map.panBy([0,inset/2],{animate:false})}
