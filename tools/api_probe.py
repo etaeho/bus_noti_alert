@@ -71,6 +71,14 @@ def main() -> None:
         print("DATA_GO_KR_API_KEY 없음")
         return
     T = "http://apis.data.go.kr/1613000"
+    # 빠른 점검: 지금 키로 도착정보가 되는지 (일일 한도 초과·세션 한도 확인용, 호출 3번)
+    print("▶ 빠른 점검 (도착정보 / 정류소 검색)")
+    for nid in CANDIDATE_NODE_IDS:
+        call(f"도착 정보 [{nid}]", f"{T}/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList",
+             {"cityCode": CITY, "nodeId": nid, "numOfRows": 30})
+    call("정류소 번호로 검색", f"{T}/BusSttnInfoInqireService/getSttnNoList", {"cityCode": CITY, "nodeNo": STOP_NO, "numOfRows": 5})
+    if os.environ.get("PROBE_FULL") != "1":
+        return
     # 1) 정류소 번호 / 이름 검색
     by_no = call("정류소 번호로 검색", f"{T}/BusSttnInfoInqireService/getSttnNoList", {"cityCode": CITY, "nodeNo": STOP_NO, "numOfRows": 20})
     by_nm = call("정류소 이름으로 검색", f"{T}/BusSttnInfoInqireService/getSttnNoList", {"cityCode": CITY, "nodeNm": NAME, "numOfRows": 20})
