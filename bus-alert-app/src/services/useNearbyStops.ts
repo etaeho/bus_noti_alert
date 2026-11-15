@@ -5,7 +5,7 @@ import * as Location from 'expo-location';
 import { useCallback, useRef, useState } from 'react';
 
 import { nearbyStops, regionFromAddress } from '../core/busApi';
-import { resolveDirection } from './directionCache';
+import { getCachedDirection, resolveDirection } from './directionCache';
 import { distanceM } from '../core/decide';
 import type { Region, StopCandidate, StopDirection } from '../core/types';
 import { getApiKey, stopKeyOf } from './storage';
@@ -64,14 +64,28 @@ export function useNearbyStops(limit = 6) {
         all.sort((a, b) => (a.distanceM ?? 1e9) - (b.distanceM ?? 1e9));
         const top = all.slice(0, limit);
         setStops(top);
-        // 방면은 하나씩 (주변 목록을 함께 넘겨 위치 추정에도 사용)
+        // 방면: 저장된 값은 바로, 새로 묻는 건 가까운 2곳만 하나씩 (API 호출이 몰리지 않게)
+        const toAsk: StopCandidate[] = [];
         for (const s of top) {
           const k = stopKeyOf(s);
-          setDirections((d) => ({ ...d, [k]: d[k] && d[k] !== 'error' ? d[k] : 'loading' }));
-          resolveDirection(s, all, 6 * 3600_000)
-            .then((dir) => setDirections((d) => ({ ...d, [k]: dir })))
-            .catch(() => setDirections((d) => ({ ...d, [k]: 'error' })));
+          const c = await getCachedDirection(s);
+          if (c) setDirections((d) => ({ ...d, [k]: c }));
+          else if (toAsk.length < 2) {
+            toAsk.push(s);
+            setDirections((d) => ({ ...d, [k]: d[k] && d[k] !== 'error' ? d[k] : 'loading' }));
+          } else setDirections((d) => ({ ...d, [k]: d[k] ?? 'error' }));
         }
+        void (async () => {
+          for (const s of toAsk) {
+            const k = stopKeyOf(s);
+            try {
+              const dir = await resolveDirection(s, all, 6 * 3600_000);
+              setDirections((d) => ({ ...d, [k]: dir }));
+            } catch {
+              setDirections((d) => ({ ...d, [k]: 'error' }));
+            }
+          }
+        })();
       } catch (e) {
         setError((e as Error).message);
       } finally {

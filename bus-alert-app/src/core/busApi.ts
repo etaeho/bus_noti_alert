@@ -126,13 +126,45 @@ export function parseTagoResponse(text: string): Item[] {
 }
 
 /**
+ * TAGO 동시 호출 제한.
+ * 한꺼번에 많이 부르면 서버가 resultCode 99(세션 없음)로 거절하고 일일 한도도 빨리 닳는다.
+ * 동시에 2개까지만 보내고, 도착정보(화면·알림)는 방면 판별 같은 부가 조회보다 먼저 보낸다.
+ */
+type Prio = 'high' | 'low';
+const TAGO_MAX_CONCURRENT = 2;
+let tagoRunning = 0;
+const tagoQueue: Record<Prio, (() => void)[]> = { high: [], low: [] };
+
+function tagoPump(): void {
+  while (tagoRunning < TAGO_MAX_CONCURRENT) {
+    const next = tagoQueue.high.shift() ?? tagoQueue.low.shift();
+    if (!next) return;
+    tagoRunning++;
+    next();
+  }
+}
+
+async function tagoSlot<T>(prio: Prio, fn: () => Promise<T>): Promise<T> {
+  await new Promise<void>((resolve) => {
+    tagoQueue[prio].push(resolve);
+    tagoPump();
+  });
+  try {
+    return await fn();
+  } finally {
+    tagoRunning--;
+    tagoPump();
+  }
+}
+
+/**
  * TAGO 호출 + 파싱. 서버가 동시 접속 한도로 resultCode 99(가용한 세션이 존재하지 않습니다)를
  * 돌려주면 잠시 후 최대 2번 다시 시도한다.
  */
-async function tagoItems(url: string): Promise<Item[]> {
+async function tagoItems(url: string, prio: Prio = 'high'): Promise<Item[]> {
   for (let attempt = 0; ; attempt++) {
     try {
-      return parseTagoResponse(await httpGet(url));
+      return parseTagoResponse(await tagoSlot(prio, () => httpGet(url)));
     } catch (e) {
       const msg = (e as Error).message ?? '';
       if (attempt < 2 && /\(99\)|세션/.test(msg)) {
@@ -694,6 +726,7 @@ export async function stopDirection(
   try {
     routeItems = await tagoItems(
         buildUrl(TAGO_STOP_ROUTES_URL, { serviceKey: key, cityCode: city, nodeid: stop.stationId, numOfRows: 60, pageNo: 1, _type: 'json' }),
+        'low',
     );
   } catch (e) {
     note = apiNote(e, '버스정류소정보');
@@ -710,6 +743,7 @@ export async function stopDirection(
     try {
       const stops = (await tagoItems(
           buildUrl(TAGO_ROUTE_STOPS_URL, { serviceKey: key, cityCode: city, routeId: str(r.routeid), numOfRows: 500, pageNo: 1, _type: 'json' }),
+          'low',
       )).sort((a, b) => Number(a.nodeord) - Number(b.nodeord));
       const idx = stops.findIndex((s) => str(s.nodeid) === stop.stationId);
       const next = idx >= 0 ? stops[idx + 1] : undefined;
@@ -781,6 +815,7 @@ async function tagoRouteCounts(key: string, city: string, nodeId: string): Promi
   if (memo && Date.now() - memo.at < 60_000) return memo.counts;
   const items = await tagoItems(
     buildUrl(TAGO_ARRIVAL_ALL_URL, { serviceKey: key, cityCode: city, nodeId, numOfRows: 60, pageNo: 1, _type: 'json' }),
+    'low',
   );
   const counts: RouteCounts = {};
   for (const it of items) {
@@ -870,11 +905,11 @@ async function nextStopByArrivals(
     );
   let list = within(neighbors ?? []);
   if (list.length < 10) list = within(await nearbyStopsMemo(key, stop));
-  // 다음 정류장이 400m 넘게 떨어져 있기도 해서(명석고 11690 → 한국폴리텍대학 약 420m) 넉넉히 14곳까지 비교
+  // 다음 정류장이 400m 넘게 떨어져 있기도 해서(명석고 11690 → 한국폴리텍대학 약 420m, 9번째) 10곳까지 비교
   const near = list
     .map((n) => ({ n, d: distanceM(stop.latitude!, stop.longitude!, n.latitude!, n.longitude!) }))
     .sort((a, b) => a.d - b.d)
-    .slice(0, 14)
+    .slice(0, 10)
     .map((x) => x.n);
   const withCounts: { stop: StopCandidate; counts: RouteCounts }[] = [];
   for (const n of near) {

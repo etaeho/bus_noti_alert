@@ -37,6 +37,9 @@ export async function getCachedDirection(stop: StopCandidate): Promise<StopDirec
 }
 
 const inflight = new Map<string, Promise<StopDirection>>();
+/** 방면을 못 구한 정류장은 잠시 다시 묻지 않음 (버스가 없는 시간에 같은 조회가 반복되지 않게) */
+const recentMiss = new Map<string, { at: number; d: StopDirection }>();
+const MISS_TTL_MS = 20 * 60_000;
 
 /**
  * @param maxAgeMs 이 시간 안에 판별한 값이 있으면 다시 조회하지 않음 (목록 화면용)
@@ -51,6 +54,8 @@ export async function resolveDirection(
   if (cached && maxAgeMs > 0 && Date.now() - cached.at < maxAgeMs) return cached;
   const running = inflight.get(key);
   if (running) return running;
+  const miss = recentMiss.get(key);
+  if (miss && Date.now() - miss.at < MISS_TTL_MS) return cached ?? miss.d;
   const p = doResolve(key, stop, cached, neighbors).finally(() => inflight.delete(key));
   inflight.set(key, p);
   return p;
@@ -69,6 +74,7 @@ async function doResolve(
       await updateSavedDirection(key, d.label).catch(() => {});
       return d;
     }
+    recentMiss.set(key, { at: Date.now(), d });
     if (cached) {
       return {
         ...cached,
@@ -79,6 +85,7 @@ async function doResolve(
     }
     return d;
   } catch (e) {
+    recentMiss.set(key, { at: Date.now(), d: cached ?? { label: '', routes: [] } });
     if (cached) return cached;
     throw e;
   }
