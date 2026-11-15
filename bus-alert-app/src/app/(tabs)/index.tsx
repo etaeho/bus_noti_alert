@@ -537,7 +537,7 @@ export default function StopsScreen() {
                       <Button title="위치 권한 허용" icon="location" small onPress={() => void nearby.load(true)} />
                     </>
                   ) : nearby.error ? (
-                    <Text style={{ color: t.danger }}>{nearby.error}</Text>
+                    hasKey ? <Text style={{ color: t.danger }}>{nearby.error}</Text> : null
                   ) : (
                     <ActivityIndicator />
                   )}

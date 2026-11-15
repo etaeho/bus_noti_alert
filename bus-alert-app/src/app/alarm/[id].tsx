@@ -200,7 +200,7 @@ export default function AlarmEditScreen() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Stack.Screen options={{ title: isNew ? '새 버스 알림' : '버스 알림 수정' }} />
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <SectionTitle>① 정류장 · 노선</SectionTitle>
+        <SectionTitle>정류장 · 노선</SectionTitle>
         <Card>
           <Label>알림 이름</Label>
           <Field value={a.label} onChangeText={(v) => set({ label: v })} placeholder="예: 출근 311번" />
@@ -260,7 +260,7 @@ export default function AlarmEditScreen() {
           ) : null}
         </Card>
 
-        <SectionTitle>② 알림 받을 시간</SectionTitle>
+        <SectionTitle>알림 받을 시간</SectionTitle>
         <Card>
           <View style={styles.timeRow}>
             <View style={{ alignItems: 'center' }}>
@@ -289,7 +289,7 @@ export default function AlarmEditScreen() {
           </View>
         </Card>
 
-        <SectionTitle>③ 알림 방식</SectionTitle>
+        <SectionTitle>알림 방식</SectionTitle>
         <Card>
           <Label hint="여러 개 선택 가능 · 각 단계마다 한 번씩 알림">몇 정거장 전에 알릴까요?</Label>
           <View style={styles.wrap}>

@@ -187,7 +187,7 @@ export default function RideScreen() {
           버스에 탄 뒤 내릴 정류장과 타고 있는 노선을 고르세요. 내리기 몇 정거장 전에 알려 드립니다.
         </Muted>
 
-        <SectionTitle>① 내릴 정류장 · 타고 있는 노선</SectionTitle>
+        <SectionTitle>내릴 정류장 · 노선</SectionTitle>
         <Card>
           {r.stopName || r.stopNo ? (
             <View style={[styles.stopBox, { borderColor: t.border, backgroundColor: t.inputBg }]}>
@@ -224,7 +224,7 @@ export default function RideScreen() {
           )}
         </Card>
 
-        <SectionTitle>② 알림 방식</SectionTitle>
+        <SectionTitle>알림 방식</SectionTitle>
         <Card>
           <Label hint="여러 개 선택 가능">내릴 정류장 몇 정거장 전에 알릴까요?</Label>
           <View style={styles.wrap}>
