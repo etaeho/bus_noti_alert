@@ -77,6 +77,22 @@ def main() -> None:
         call(f"도착 정보 [{nid}]", f"{T}/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList",
              {"cityCode": CITY, "nodeId": nid, "numOfRows": 30})
     call("정류소 번호로 검색", f"{T}/BusSttnInfoInqireService/getSttnNoList", {"cityCode": CITY, "nodeNo": STOP_NO, "numOfRows": 5})
+    # 대전 여러 곳 + 다른 도시 비교: 도착정보가 대전 전체에서 비는지
+    import time
+    for city, lat, lng, nm in [("25", 36.3326, 127.4342, "대전역"), ("25", 36.3510, 127.3850, "둔산"),
+                               ("25", 36.3541, 127.4542, "명석고 좌표"), ("33010", 36.6372, 127.4897, "청주 비교"),
+                               ("12", 36.4800, 127.2890, "세종 비교")]:
+        near = call(f"주변 정류소 - {nm}", f"{T}/BusSttnInfoInqireService/getCrdntPrxmtSttnList",
+                    {"gpsLati": lat, "gpsLong": lng, "numOfRows": 6}, quiet=True)
+        total = 0
+        for n in near[:4]:
+            time.sleep(0.4)
+            arr = call("", f"{T}/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList",
+                       {"cityCode": city if city != "12" else str(n.get("citycode", "12")), "nodeId": n["nodeid"], "numOfRows": 40}, quiet=True)
+            total += len(arr)
+            print(f"   [{nm}] {n.get('nodenm')} {n.get('nodeno', '')} → 도착 {len(arr)}건 " +
+                  " ".join(sorted(f"{a.get('routeno')}:{a.get('arrprevstationcnt')}" for a in arr))[:120])
+        print(f"   ▶ {nm}: 정류소 {min(4, len(near))}곳 도착 합계 {total}건")
     if os.environ.get("PROBE_FULL") != "1":
         return
     # 1) 정류소 번호 / 이름 검색
