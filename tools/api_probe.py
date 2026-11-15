@@ -77,11 +77,19 @@ def main() -> None:
         call(f"도착 정보 [{nid}]", f"{T}/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList",
              {"cityCode": CITY, "nodeId": nid, "numOfRows": 30})
     call("정류소 번호로 검색", f"{T}/BusSttnInfoInqireService/getSttnNoList", {"cityCode": CITY, "nodeNo": STOP_NO, "numOfRows": 5})
+    # 대전시 자체 BIS API (TAGO 대전 데이터가 비어 있을 때 대안) - BusStopID 는 nodeid 의 숫자 부분
+    print(f"\n{'=' * 70}\n▶ 대전시 BIS 도착정보 (openapitraffic.daejeon.go.kr)")
+    for sid in ["8001612", "8001611"]:
+        try:
+            r = requests.get("http://openapitraffic.daejeon.go.kr/api/rest/arrive/getArrInfoByStopID",
+                             params={"serviceKey": KEY, "BusStopID": sid}, timeout=15)
+            print(f"   BusStopID={sid} HTTP {r.status_code}: " + clean(r.text.strip()[:700]))
+        except Exception as e:  # noqa: BLE001
+            print("   오류: " + clean(str(e))[:300])
+
     # 대전 여러 곳 + 다른 도시 비교: 도착정보가 대전 전체에서 비는지
     import time
-    for city, lat, lng, nm in [("25", 36.3326, 127.4342, "대전역"), ("25", 36.3510, 127.3850, "둔산"),
-                               ("25", 36.3541, 127.4542, "명석고 좌표"), ("33010", 36.6372, 127.4897, "청주 비교"),
-                               ("12", 36.4800, 127.2890, "세종 비교")]:
+    for city, lat, lng, nm in [("25", 36.3326, 127.4342, "대전역")]:
         near = call(f"주변 정류소 - {nm}", f"{T}/BusSttnInfoInqireService/getCrdntPrxmtSttnList",
                     {"gpsLati": lat, "gpsLong": lng, "numOfRows": 6}, quiet=True)
         total = 0
