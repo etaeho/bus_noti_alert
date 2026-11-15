@@ -5,9 +5,8 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native';
 
-import { HeroHeader } from '../../components/HeroHeader';
-import { Chip, EmptyState, Icon, useTheme, type IconName } from '../../components/ui';
-import { clearHistory, getHistory, markHistorySeen, type HistoryEntry, type HistoryKind } from '../../services/storage';
+import { Chip, EmptyState, Icon, useTheme, type IconName } from '../components/ui';
+import { clearHistory, getHistory, markHistorySeen, type HistoryEntry, type HistoryKind } from '../services/storage';
 
 const KIND_META: Record<HistoryKind, { icon: IconName; label: string; color: 'primary' | 'success' | 'warning' | 'sub' }> = {
   stage: { icon: 'bus', label: '정거장 알림', color: 'primary' },
@@ -83,7 +82,6 @@ export default function HistoryScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <HeroHeader title="기록" subtitle={`받은 알림 ${items.length}건`} />
       <View style={styles.filters}>
         <Chip label="전체" selected={filter === 'all'} onPress={() => setFilter('all')} />
         <Chip label="버스 도착" selected={filter === 'bus'} onPress={() => setFilter('bus')} />

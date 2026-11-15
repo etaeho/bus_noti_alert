@@ -16,6 +16,7 @@ import { REGION_LABELS, type AlarmRuntimeState, type BusAlarm, type RideAlert, t
 import { requestLocationPermissions } from '../../services/background';
 import { ensureNotificationPermission } from '../../services/notify';
 import { applyMonitoringChanges, useMonitoringStatus } from '../../services/runtime';
+import { useUnseenCount } from '../../services/useUnseenCount';
 import {
   getAlarms,
   getAllAlarmStates,
@@ -43,6 +44,7 @@ function nextLabel(d: Date, now: Date): string {
 export default function AlarmsScreen() {
   const t = useTheme();
   const status = useMonitoringStatus();
+  const unseen = useUnseenCount();
   const [alarms, setAlarms] = useState<BusAlarm[]>([]);
   const [states, setStates] = useState<Record<string, AlarmRuntimeState>>({});
   const [ride, setRide] = useState<RideAlert | null>(null);
@@ -118,8 +120,27 @@ export default function AlarmsScreen() {
           />
         }
       >
-        <HeroHeader title="알림 설정" subtitle={today} right={<HeroPill text={statusText} tone={statusLive ? 'live' : 'neutral'} />} />
+        <HeroHeader title="알림" subtitle={today} right={<HeroPill text={statusText} tone={statusLive ? 'live' : 'neutral'} />} />
         <View style={styles.body}>
+        <Card style={{ paddingVertical: 4 }}>
+          <ListRow
+            icon="notifications-outline"
+            title="받은 알림"
+            subtitle={unseen > 0 ? `새 알림 ${unseen}건` : '지금까지 받은 버스·하차 알림'}
+            onPress={() => router.push('/history')}
+            right={
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {unseen > 0 ? (
+                  <View style={[styles.badge, { backgroundColor: t.danger }]}>
+                    <Text style={styles.badgeText}>{unseen > 99 ? '99+' : unseen}</Text>
+                  </View>
+                ) : null}
+                <Icon name="chevron-forward" size={18} color={t.sub} />
+              </View>
+            }
+            last
+          />
+        </Card>
         {setup && !setupDone ? (
           <Card>
             <Text style={[styles.cardTitle, { color: t.text }]}>처음 설정하기</Text>
@@ -301,6 +322,8 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 17, fontWeight: '700', marginBottom: 2 },
   big: { fontSize: 30, fontWeight: '800', marginTop: 4, fontVariant: ['tabular-nums'] },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  badge: { minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center', marginRight: 6 },
+  badgeText: { color: '#FFFFFF', fontSize: 11.5, fontWeight: '700' },
   meta: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   metaText: { marginLeft: 6, fontSize: 14, flex: 1 },
 });

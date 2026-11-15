@@ -56,7 +56,7 @@ function withDirSuffix(label: string): string {
   return /방면$/.test(label) ? label : `${label} 방면`;
 }
 
-type Mode = 'stop' | 'nearby';
+type Mode = 'list' | 'stop';
 
 export default function StopsScreen() {
   const t = useTheme();
@@ -68,7 +68,7 @@ export default function StopsScreen() {
   const [favorites, setFavorites] = useState<FavoriteStop[]>([]);
   const [hasKey, setHasKey] = useState(true);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [mode, setMode] = useState<Mode>('stop');
+  const [mode, setMode] = useState<Mode>('list');
   const [renaming, setRenaming] = useState<FavoriteStop | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -156,21 +156,7 @@ export default function StopsScreen() {
     [allStops],
   );
 
-  // 처음 선택: 첫 즐겨찾기 → 없으면 가장 가까운 정류장
-  // 처음 선택: 내 위치에서 가장 가까운 정류장 → 위치를 못 쓰면 첫 즐겨찾기
   const userPicked = useRef(false);
-  useEffect(() => {
-    if (userPicked.current && selectedKey && allStops.has(selectedKey)) return;
-    if (nearby.stops[0]) {
-      const k = stopKeyOf(nearby.stops[0]);
-      if (k !== selectedKey) setSelectedKey(k);
-      return;
-    }
-    if (!nearby.attempted || nearby.loading) return; // 위치 확인 중에는 기다림
-    if (selectedKey && allStops.has(selectedKey)) return;
-    const first = favorites[0]?.key ?? null;
-    if (first) setSelectedKey(first);
-  }, [favorites, nearby.stops, nearby.attempted, nearby.loading, selectedKey, allStops]);
 
   const selected = selectedKey ? allStops.get(selectedKey) : undefined;
   const selectedFav = favorites.find((f) => f.key === selectedKey);
@@ -263,6 +249,12 @@ export default function StopsScreen() {
     if (s?.latitude != null && s.longitude != null) mapRef.current?.focus(s.latitude, s.longitude, 17);
   };
 
+  const backToList = () => {
+    setMode('list');
+    setSelectedKey(null);
+    if (nearby.me) mapRef.current?.focus(nearby.me.latitude, nearby.me.longitude, 16);
+  };
+
   const toggleStar = () => {
     if (!selected) return;
     void fav.toggle(selected.stop, dirLabel);
@@ -341,8 +333,7 @@ export default function StopsScreen() {
         </Pressable>
         <Pressable
           onPress={() => {
-            setMode('stop');
-            if (favorites[0]) select(favorites[0].key);
+            backToList();
             snap(true);
           }}
           style={[styles.roundBtn, styles.float]}
@@ -396,6 +387,9 @@ export default function StopsScreen() {
 
             {mode === 'stop' && selected ? (
               <View style={styles.sheetHead}>
+                <Pressable onPress={backToList} hitSlop={10} style={[styles.backBtn, { backgroundColor: t.chip }]} accessibilityLabel="즐겨찾는 정류장 목록으로">
+                  <Icon name="chevron-back" size={20} color={t.text} />
+                </Pressable>
                 <Pressable style={{ flex: 1 }} onPress={() => openStopDetail(selected.stop, dirLabel)}>
                   <Text style={[styles.stopTitle, { color: t.text }]} numberOfLines={1}>
                     {selectedFav?.nickname || selected.stop.stopName}
@@ -419,49 +413,12 @@ export default function StopsScreen() {
                   <Icon name={starOn ? 'star' : 'star-outline'} size={21} color={starOn ? '#FFB800' : t.sub} />
                 </Pressable>
               </View>
-            ) : mode === 'nearby' ? (
-              <View style={styles.sheetHead}>
-                <Text style={[styles.stopTitle, { color: t.text, flex: 1 }]}>가까운 정류장</Text>
-                <Pressable onPress={() => void nearby.load(true)} hitSlop={10} style={[styles.starBtn, { backgroundColor: t.chip }]} accessibilityLabel="새로고침">
-                  {nearby.loading ? <ActivityIndicator size="small" /> : <Icon name="refresh" size={19} color={t.text} />}
-                </Pressable>
-              </View>
             ) : (
-              <View style={styles.sheetHead}>
-                <Text style={[styles.stopTitle, { color: t.text }]}>정류장</Text>
+              <View style={[styles.sheetHead, { paddingBottom: 8 }]}>
+                <Text style={[styles.stopTitle, { color: t.text, flex: 1 }]}>즐겨찾는 정류장</Text>
+                {favorites.length ? <Text style={{ color: t.sub, fontSize: 12 }}>길게 눌러 편집</Text> : null}
               </View>
             )}
-
-            {/* 칩: 즐겨찾기 · 주변 */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-              {favorites.map((f, i) => {
-                const on = mode === 'stop' && f.key === selectedKey;
-                return (
-                  <Pressable
-                    key={f.key}
-                    onPress={() => select(f.key)}
-                    onLongPress={() => favMenu(f, i)}
-                    style={[styles.chip, { backgroundColor: on ? t.text : t.chip }]}
-                  >
-                    <Text style={[styles.chipText, { color: on ? t.card : t.text, fontWeight: on ? '700' : '600' }]} numberOfLines={1}>
-                      {f.nickname || f.stop.stopName}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-              <Pressable
-                onPress={() => {
-                  setMode('nearby');
-                  snap(true);
-                }}
-                style={[styles.chip, { backgroundColor: mode === 'nearby' ? t.text : t.chip }]}
-              >
-                <Icon name="location-outline" size={14} color={mode === 'nearby' ? t.card : t.text} />
-                <Text style={[styles.chipText, { color: mode === 'nearby' ? t.card : t.text, marginLeft: 3 }]}>
-                  주변{nearby.stops.length ? ` ${nearby.stops.length}` : ''}
-                </Text>
-              </Pressable>
-            </ScrollView>
           </View>
 
           <ScrollView
@@ -545,27 +502,79 @@ export default function StopsScreen() {
               )
             ) : (
               <>
+                {favorites.length === 0 ? (
+                  <View style={[styles.favEmpty, { backgroundColor: t.bg }]}>
+                    <Icon name="star-outline" size={22} color={t.sub} />
+                    <Text style={{ color: t.sub, marginLeft: 10, flex: 1, lineHeight: 19 }}>
+                      지도나 아래 목록에서 정류장을 고른 뒤 별 버튼을 누르면 여기에 모아 보여 드려요.
+                    </Text>
+                  </View>
+                ) : (
+                  favorites.map((f, i) => {
+                    const dirOk = f.directionLabel && !isStaleDirection(f.directionLabel);
+                    return (
+                      <Pressable
+                        key={f.key}
+                        onPress={() => select(f.key)}
+                        onLongPress={() => favMenu(f, i)}
+                        style={({ pressed }) => [styles.favCard, { backgroundColor: t.bg, opacity: pressed ? 0.75 : 1 }]}
+                        accessibilityRole="button"
+                      >
+                        <View style={styles.favHead}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: t.text, fontSize: 16, fontWeight: '700' }} numberOfLines={1}>
+                              {f.nickname || f.stop.stopName}
+                            </Text>
+                            <Text style={{ color: t.sub, fontSize: 12.5, marginTop: 1 }} numberOfLines={1}>
+                              {[f.nickname ? f.stop.stopName : '', f.stop.stopNo, dirOk ? withDirSuffix(f.directionLabel) : '']
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </Text>
+                          </View>
+                          <Icon name="chevron-forward" size={18} color={t.sub} />
+                        </View>
+                        {hasKey && i < 3 ? (
+                          <LiveArrivals
+                            key={`${f.key}-${refreshKey}`}
+                            sheet
+                            maxRows={2}
+                            intervalSec={30}
+                            query={{
+                              region: f.stop.region,
+                              stopNo: f.stop.stopNo,
+                              stationId: f.stop.stationId,
+                              cityCode: f.stop.cityCode,
+                              stopName: f.stop.stopName,
+                            }}
+                          />
+                        ) : (
+                          <Text style={{ color: t.primary, fontSize: 13, fontWeight: '600', marginTop: 6 }}>눌러서 도착 정보 보기</Text>
+                        )}
+                      </Pressable>
+                    );
+                  })
+                )}
+
+                <View style={styles.nearHead}>
+                  <Text style={{ color: t.sub, fontSize: 13, fontWeight: '700', flex: 1 }}>내 주변 정류장</Text>
+                  <Pressable onPress={() => void nearby.load(true)} hitSlop={10} accessibilityLabel="주변 정류장 새로고침">
+                    {nearby.loading ? <ActivityIndicator size="small" /> : <Icon name="refresh" size={18} color={t.sub} />}
+                  </Pressable>
+                </View>
                 {nearby.needsPermission ? (
-                  <View style={{ paddingVertical: 16 }}>
-                    <Text style={{ color: t.sub, marginBottom: 10 }}>현재 위치를 허용하면 가까운 정류장을 보여 드립니다.</Text>
+                  <View style={{ paddingVertical: 8 }}>
+                    <Text style={{ color: t.sub, marginBottom: 10 }}>현재 위치를 허용하면 주변 정류장을 지도에 보여 드립니다.</Text>
                     <Button title="위치 권한 허용" icon="location" small onPress={() => void nearby.load(true)} />
                   </View>
                 ) : nearby.error ? (
-                  <Text style={{ color: t.danger, paddingVertical: 16 }}>{nearby.error}</Text>
+                  hasKey ? <Text style={{ color: t.danger, paddingVertical: 8 }}>{nearby.error}</Text> : null
                 ) : nearby.stops.length === 0 ? (
-                  [0, 1, 2].map((i) => <View key={i} style={[styles.skeleton, { backgroundColor: t.chip }]} />)
+                  [0, 1].map((i) => <View key={i} style={[styles.skeleton, { backgroundColor: t.chip }]} />)
                 ) : (
                   nearby.stops.map((s, i) => {
                     const k = stopKeyOf(s);
                     const d = nearby.directions[k];
-                    const sub =
-                      d === undefined || d === 'loading'
-                        ? '방면 확인 중…'
-                        : d === 'error'
-                          ? ''
-                          : d.label
-                            ? withDirSuffix(d.label)
-                            : d.routes.slice(0, 6).join(' · ');
+                    const sub = d && typeof d === 'object' ? (d.label ? withDirSuffix(d.label) : d.routes.slice(0, 6).join(' · ')) : '';
                     const on = fav.keys.has(k);
                     return (
                       <Pressable
@@ -599,18 +608,8 @@ export default function StopsScreen() {
                     );
                   })
                 )}
-                <Pressable
-                  onPress={() => router.push({ pathname: '/stop-picker', params: { purpose: 'view' } })}
-                  style={[styles.moreBtn, { backgroundColor: t.chip }]}
-                >
-                  <Text style={{ color: t.text, fontWeight: '700' }}>지도에서 다른 정류장 찾기</Text>
-                </Pressable>
               </>
             )}
-
-            {favorites.length > 0 && mode === 'stop' ? (
-              <Text style={{ color: t.sub, fontSize: 12, marginTop: 14 }}>즐겨찾기 칩을 길게 누르면 이름 바꾸기 · 순서 · 삭제</Text>
-            ) : null}
           </ScrollView>
         </Animated.View>
       ) : null}
@@ -682,6 +681,11 @@ const styles = StyleSheet.create({
   nearRow: { flexDirection: 'row', alignItems: 'center', minHeight: 60, paddingVertical: 8 },
   pinDot: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   skeleton: { height: 50, borderRadius: 10, marginVertical: 6 },
+  backBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  favEmpty: { flexDirection: 'row', alignItems: 'center', borderRadius: 14, padding: 14, marginTop: 4 },
+  favCard: { borderRadius: 16, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, marginTop: 10 },
+  favHead: { flexDirection: 'row', alignItems: 'center' },
+  nearHead: { flexDirection: 'row', alignItems: 'center', marginTop: 22, marginBottom: 2 },
   rideBanner: {
     position: 'absolute',
     left: 16,

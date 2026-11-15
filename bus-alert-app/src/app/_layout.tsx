@@ -24,6 +24,7 @@ export default function RootLayout() {
         <Stack.Screen name="stop-picker" options={{ title: '정류장 선택' }} />
         <Stack.Screen name="stop/view" options={{ title: '정류장' }} />
         <Stack.Screen name="ride" options={{ title: '하차 알림' }} />
+        <Stack.Screen name="history" options={{ title: '받은 알림' }} />
       </Stack>
     </>
   );
