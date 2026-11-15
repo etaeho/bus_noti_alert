@@ -13,6 +13,9 @@ if ! adb install -r -g "$APK" > "$OUT/install.txt" 2>&1; then
   echo "=== 설치 실패 ==="; cat "$OUT/install.txt"; exit 0
 fi
 
+# 에뮬레이터 위치를 대전(명석고 부근)으로
+adb emu geo fix 127.3633 36.3095 > /dev/null 2>&1 || true
+
 adb logcat -c
 adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 > /dev/null
 
@@ -24,6 +27,7 @@ for i in $(seq 1 40); do
   sleep 1
 done
 adb exec-out screencap -p > "$OUT/screen.png" || true
+cp "$OUT/screen.png" "$OUT/shot_1_home.png" 2>/dev/null || true
 adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 && adb pull /sdcard/ui.xml "$OUT/ui.xml" > /dev/null 2>&1 || true
 
 # 정류장 선택 화면(지도 WebView)도 열어 본다
@@ -35,11 +39,20 @@ adb shell uiautomator dump /sdcard/ui2.xml > /dev/null 2>&1 && adb pull /sdcard/
 # 알림 기록 탭
 adb shell am start -a android.intent.action.VIEW -d "busalert://history" "$PKG" > /dev/null 2>&1 || true
 sleep 8
+adb exec-out screencap -p > "$OUT/shot_2_history.png" || true
 adb shell uiautomator dump /sdcard/ui3.xml > /dev/null 2>&1 && adb pull /sdcard/ui3.xml "$OUT/ui_history.xml" > /dev/null 2>&1 || true
+
+# 알림 설정 · 설정 탭 · 하차 알림 화면 (스크린샷용)
+for s in "alarms:3_alarms" "settings:4_settings" "ride:5_ride"; do
+  adb shell am start -a android.intent.action.VIEW -d "busalert://${s%%:*}" "$PKG" > /dev/null 2>&1 || true
+  sleep 7
+  adb exec-out screencap -p > "$OUT/shot_${s##*:}.png" || true
+done
 
 # 정류장 상세 화면
 adb shell am start -a android.intent.action.VIEW -d "busalert://stop/view?region=daejeon\&stopNo=11690\&stationId=DJB8001610\&stopName=TEST\&lat=36.31\&lng=127.36" "$PKG" > /dev/null 2>&1 || true
 sleep 12
+adb exec-out screencap -p > "$OUT/shot_6_stop.png" || true
 adb shell uiautomator dump /sdcard/ui4.xml > /dev/null 2>&1 && adb pull /sdcard/ui4.xml "$OUT/ui_stop.xml" > /dev/null 2>&1 || true
 
 PID=$(adb shell pidof "$PKG" | tr -d '\r')

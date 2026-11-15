@@ -151,6 +151,12 @@ jobs:
         with:
           name: bus-alert-apk
 
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: smoke-test-logs
+          path: smoke
+
       - name: '"app-dev" 프리릴리스에 게시'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -162,7 +168,8 @@ jobs:
           폰에서 아래 링크로 설치:
           https://github.com/${GITHUB_REPOSITORY}/releases/download/app-dev/bus-alert.apk"
           gh release delete app-dev --yes --cleanup-tag || true
-          gh release create app-dev bus-alert.apk \
+          SHOTS=$(ls smoke/shot_*.png 2>/dev/null || true)
+          gh release create app-dev bus-alert.apk $SHOTS \
             --prerelease \
             --target "$GITHUB_SHA" \
             --title "버스 알리미 개발 빌드 #${GITHUB_RUN_NUMBER} (${GITHUB_REF_NAME})" \
